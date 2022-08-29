@@ -7,17 +7,17 @@ const {fromFee, simulateSwap, toPercent} = require('@invariant-labs/sdk/lib/util
 const {Jupiter} = require("@jup-ag/core");
 const JSBI = require('jsbi');
 
-const { KEYPAIR, LOOP_TIMEOUT, RPC_ENDPOINT } = process.env;
+const {KEYPAIR, LOOP_TIMEOUT, RPC_ENDPOINT} = process.env;
 
 let secretKey = Uint8Array.from(JSON.parse(KEYPAIR));
 let keypair = Keypair.fromSecretKey(secretKey);
 
 let connection = new Connection(RPC_ENDPOINT, {confirmTransactionInitialTimeout: 300000});
 
-const sleep = function (ms){
-    return new Promise(resolve=>{
-        console.log(`Waiting ${ms/1000} seconds before continue`);
-        setTimeout(resolve,ms)
+const sleep = function (ms) {
+    return new Promise(resolve => {
+        console.log(`Waiting ${ms / 1000} seconds before continue`);
+        setTimeout(resolve, ms)
     })
 };
 
@@ -50,11 +50,11 @@ const TOKEN = {
 }
 
 const INVARIANT_FEE_TIERS = [
-    { fee: fromFee(new anchor.BN(10)) },
-    { fee: fromFee(new anchor.BN(50)) },
-    { fee: fromFee(new anchor.BN(100)) },
-    { fee: fromFee(new anchor.BN(300)) },
-    { fee: fromFee(new anchor.BN(1000)) }
+    {fee: fromFee(new anchor.BN(10))},
+    {fee: fromFee(new anchor.BN(50))},
+    {fee: fromFee(new anchor.BN(100))},
+    {fee: fromFee(new anchor.BN(300))},
+    {fee: fromFee(new anchor.BN(1000))}
 ]
 
 // Settings for LP's
@@ -184,7 +184,8 @@ async function simulateJupiter(jupiter, from, to, amount, slippage) {
         outputMint: new PublicKey(to.address), // Mint address of the output token
         amount, // raw input amount of tokens
         slippage, // The slippage in % terms
-        forceFetch: false // false is the default value => will use cache if not older than routeCacheDuration
+        forceFetch: true, // false is the default value => will use cache if not older than routeCacheDuration
+        intermediateTokens: false // intermediateTokens, if provided will only find routes that use the intermediate tokens
     });
     return routes;
 
@@ -204,93 +205,95 @@ async function swapJupiter(jupiter, routes) {
 
 // create and call async main function
 async function main(SETTING) {
+
     //Create console log with divider
     console.log('-----------------------------------------------------------------------------------------------------------------');
     console.log(`Processing ${SETTING.tokenX.symbol} / ${SETTING.tokenY.symbol} with amount ${SETTING.tokenAmount} and fromInvariant ${SETTING.fromInvariant}`);
     const tokenOutAmountInWallet = await getTokenAddressBalance(SETTING.tokenY.address);
     // If tokenOut is not zero in the wallet, something happened, exit process
-    if (tokenOutAmountInWallet.uiAmount > 0 && SETTING.tokenY.symbol === 'MSOL') {
+    if (tokenOutAmountInWallet.uiAmount > 0 && SETTING.tokenY.symbol === 'mSOL') {
         console.log("tokenOut amount should be zero");
         console.log(tokenOutAmountInWallet);
-        process.exit(0);
+        await sleep(60000);
+        return;
     }
 
-    //Init jupiter
-    const jupiter = await Jupiter.load({
-        connection,
-        cluster: "mainnet-beta",
-        user: keypair, // or public key
-        // platformFeeAndAccounts:  NO_PLATFORM_FEE,
-        routeCacheDuration: 10_000, // Will not refetch data on computeRoutes for up to 10 seconds
-    });
+    try {
+        //Init jupiter
+        const jupiter = await Jupiter.load({
+            connection,
+            cluster: "mainnet-beta",
+            user: keypair, // or public key
+            // platformFeeAndAccounts:  NO_PLATFORM_FEE,
+            routeCacheDuration: 10_000, // Will not refetch data on computeRoutes for up to 10 seconds
+        });
 
-    if (SETTING.fromInvariant) {
-        const tokenInAmount = transferAmountToSolana(
-            SETTING.tokenAmount,
-            SETTING.tokenX.decimals
-        );
-        const resultSimulateInvariant = await simulateInvariant(SETTING, tokenInAmount);
-        console.log(`${resultSimulateInvariant.accumulatedAmountIn.add(resultSimulateInvariant.accumulatedFee).toString()} ${SETTING.tokenX.symbol} => ${resultSimulateInvariant.accumulatedAmountOut.toString()} ${SETTING.tokenY.symbol}`)
+        if (SETTING.fromInvariant) {
+            const tokenInAmount = transferAmountToSolana(
+                SETTING.tokenAmount,
+                SETTING.tokenX.decimals
+            );
+            const resultSimulateInvariant = await simulateInvariant(SETTING, tokenInAmount);
+            console.log(`Invarinat => ${resultSimulateInvariant.accumulatedAmountIn.add(resultSimulateInvariant.accumulatedFee).toString()} ${SETTING.tokenX.symbol} => ${resultSimulateInvariant.accumulatedAmountOut.toString()} ${SETTING.tokenY.symbol}`)
 
-        const resultSimulateJupiter = await simulateJupiter(jupiter, SETTING.tokenY, SETTING.tokenX, JSBI.BigInt(resultSimulateInvariant.accumulatedAmountOut), 1);
-        console.log(`${JSBI.toNumber(resultSimulateJupiter.routesInfos[0].inAmount)} ${SETTING.tokenY.symbol} => ${JSBI.toNumber(resultSimulateJupiter.routesInfos[0].outAmount)} ${SETTING.tokenX.symbol}`)
+            const resultSimulateJupiter = await simulateJupiter(jupiter, SETTING.tokenY, SETTING.tokenX, JSBI.BigInt(resultSimulateInvariant.accumulatedAmountOut), 1);
+            console.log(`Jupiter => ${JSBI.toNumber(resultSimulateJupiter.routesInfos[0].inAmount)} ${SETTING.tokenY.symbol} => ${JSBI.toNumber(resultSimulateJupiter.routesInfos[0].outAmount)} ${SETTING.tokenX.symbol}`)
 
-        const fromInAmount = Number(resultSimulateInvariant.accumulatedAmountIn.add(resultSimulateInvariant.accumulatedFee));
-        const toOutAmount = JSBI.toNumber(resultSimulateJupiter.routesInfos[0].outAmount);
-        //console.log("fromInAmount", fromInAmount);
-        //console.log("toOutAmount", toOutAmount);
-        console.log("diff", (toOutAmount - fromInAmount));
-        if ((toOutAmount > fromInAmount) && ((toOutAmount - fromInAmount) > SETTING.minUnitProfit)) {
-            console.log("Swap out is bigger than swap in");
-            console.log("Processing Invariant swap");
-            const resultInvariantSwap = await swapInvariant(SETTING.fromInvariant, tokenInAmount, resultSimulateInvariant);
-            console.log("Invariant swap done", resultInvariantSwap);
-            await sleep(5000);
-            console.log("Processing Jupiter swap");
-            await swapJupiter(jupiter, resultSimulateJupiter.routesInfos[0]);
-            console.log("Jupiter swap done");
-            await sleep(5000);
+            const fromInAmount = Number(resultSimulateInvariant.accumulatedAmountIn.add(resultSimulateInvariant.accumulatedFee));
+            const toOutAmount = JSBI.toNumber(resultSimulateJupiter.routesInfos[0].outAmount);
+            //console.log("fromInAmount", fromInAmount);
+            //console.log("toOutAmount", toOutAmount);
+            console.log("diff", (toOutAmount - fromInAmount));
+            if ((toOutAmount > fromInAmount) && ((toOutAmount - fromInAmount) > SETTING.minUnitProfit)) {
+                console.log("Swap out is bigger than swap in");
+                console.log("Processing Invariant swap");
+                const resultInvariantSwap = await swapInvariant(SETTING.fromInvariant, tokenInAmount, resultSimulateInvariant);
+                console.log("Invariant swap done", resultInvariantSwap);
+                await sleep(5000);
+                console.log("Processing Jupiter swap");
+                await swapJupiter(jupiter, resultSimulateJupiter.routesInfos[0]);
+                console.log("Jupiter swap done");
+                await sleep(5000);
+            } else {
+                console.log("Swap in is bigger than swap out");
+            }
         } else {
-            console.log("Swap in is bigger than swap out");
-        }
-    } else {
-        const tokenInAmount = transferAmountToSolana(
-            SETTING.tokenAmount,
-            SETTING.tokenX.decimals
-        );
-        const resultSimulateJupiter = await simulateJupiter(jupiter, SETTING.tokenX, SETTING.tokenY, JSBI.BigInt(tokenInAmount), 1);
-        console.log(`${JSBI.toNumber(resultSimulateJupiter.routesInfos[0].inAmount)} ${SETTING.tokenX.symbol} => ${JSBI.toNumber(resultSimulateJupiter.routesInfos[0].outAmount)} ${SETTING.tokenY.symbol}`)
+            const tokenInAmount = transferAmountToSolana(
+                SETTING.tokenAmount,
+                SETTING.tokenX.decimals
+            );
+            const resultSimulateJupiter = await simulateJupiter(jupiter, SETTING.tokenX, SETTING.tokenY, JSBI.BigInt(tokenInAmount), 1);
+            console.log(`Jupiter => ${JSBI.toNumber(resultSimulateJupiter.routesInfos[0].inAmount)} ${SETTING.tokenX.symbol} => ${JSBI.toNumber(resultSimulateJupiter.routesInfos[0].outAmount)} ${SETTING.tokenY.symbol}`)
 
-        const resultSimulateInvariant = await simulateInvariant(SETTING, JSBI.toNumber(resultSimulateJupiter.routesInfos[0].outAmount));
-        console.log(`${resultSimulateInvariant.accumulatedAmountIn} (fee:${resultSimulateInvariant.accumulatedFee}) ${SETTING.tokenY.symbol} => ${resultSimulateInvariant.accumulatedAmountOut.toString()} ${SETTING.tokenX.symbol}`)
+            const resultSimulateInvariant = await simulateInvariant(SETTING, JSBI.toNumber(resultSimulateJupiter.routesInfos[0].outAmount));
+            console.log(`Invariant => ${resultSimulateInvariant.accumulatedAmountIn} (fee:${resultSimulateInvariant.accumulatedFee}) ${SETTING.tokenY.symbol} => ${resultSimulateInvariant.accumulatedAmountOut.toString()} ${SETTING.tokenX.symbol}`)
 
-        const fromInAmount = JSBI.toNumber(resultSimulateJupiter.routesInfos[0].inAmount);
-        const toOutAmount = Number(resultSimulateInvariant.accumulatedAmountOut);
-        //console.log("fromInAmount", fromInAmount);
-        //console.log("toOutAmount", toOutAmount);
-        console.log("diff", (toOutAmount - fromInAmount));
-        if ((toOutAmount > fromInAmount) && ((toOutAmount - fromInAmount) > SETTING.minUnitProfit)) {
-            console.log("Swap out is bigger than swap in");
-            console.log("Processing jupiter swap");
-            const resultJupiter = await swapJupiter(jupiter, resultSimulateJupiter.routesInfos[0]);
-            console.log("Jupiter swap done");
-            if (!resultJupiter.error) {
+            const fromInAmount = JSBI.toNumber(resultSimulateJupiter.routesInfos[0].inAmount);
+            const toOutAmount = Number(resultSimulateInvariant.accumulatedAmountOut);
+            //console.log("fromInAmount", fromInAmount);
+            //console.log("toOutAmount", toOutAmount);
+            console.log("diff", (toOutAmount - fromInAmount));
+            if ((toOutAmount > fromInAmount) && ((toOutAmount - fromInAmount) > SETTING.minUnitProfit)) {
+                console.log("Swap out is bigger than swap in");
+                console.log("Processing jupiter swap");
+                const resultJupiter = await swapJupiter(jupiter, resultSimulateJupiter.routesInfos[0]);
+                console.log("Jupiter swap done");
                 await sleep(5000);
                 console.log("Processing Invariant swap");
                 const resultInvariantSwap = await swapInvariant(SETTING.fromInvariant, resultJupiter.outputAmount, resultSimulateInvariant);
                 console.log("Invariant swap done", resultInvariantSwap);
                 await sleep(5000);
             } else {
-                process.exit(0);
+                console.log("Swap in is bigger than swap out");
             }
-        } else {
-            console.log("Swap in is bigger than swap out");
-        }
 
+        }
+    } catch (error) {
+        console.log(error);
     }
 }
 
-async function begin(){
+async function begin() {
     // Loop through all settings
     for (const SETTING of SETTINGS) {
         // Call main function with current setting
