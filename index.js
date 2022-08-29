@@ -12,7 +12,7 @@ const {KEYPAIR, LOOP_TIMEOUT, RPC_ENDPOINT} = process.env;
 let secretKey = Uint8Array.from(JSON.parse(KEYPAIR));
 let keypair = Keypair.fromSecretKey(secretKey);
 
-let connection = new Connection(RPC_ENDPOINT, {confirmTransactionInitialTimeout: 300000});
+let connection = new Connection(RPC_ENDPOINT, {confirmTransactionInitialTimeout: 60000});
 
 const sleep = function (ms) {
     return new Promise(resolve => {
@@ -59,52 +59,20 @@ const INVARIANT_FEE_TIERS = [
 
 // Settings for LP's
 const SETTINGS = [
-    /*{
+    {
         fromInvariant: true,
         tokenX: TOKEN.USDC,
-        tokenY: TOKEN.USDH,
-        tokenAmount: 1,
-        minUnitProfit: 2000,
-        invariantFee: INVARIANT_FEE_TIERS[0],
+        tokenY: TOKEN.MSOL,
+        tokenAmount: 0.25,
+        minUnitProfit: 500,
+        invariantFee: INVARIANT_FEE_TIERS[1],
     },
     {
         fromInvariant: false,
         tokenX: TOKEN.USDC,
-        tokenY: TOKEN.USDH,
-        tokenAmount: 1,
-        minUnitProfit: 2000,
-        invariantFee: INVARIANT_FEE_TIERS[0],
-    },*/
-    {
-        fromInvariant: true,
-        tokenX: TOKEN.USDH,
         tokenY: TOKEN.MSOL,
-        tokenAmount: 0.4,
-        minUnitProfit: 1000,
-        invariantFee: INVARIANT_FEE_TIERS[1],
-    },
-    {
-        fromInvariant: false,
-        tokenX: TOKEN.USDH,
-        tokenY: TOKEN.MSOL,
-        tokenAmount: 0.4,
-        minUnitProfit: 1000,
-        invariantFee: INVARIANT_FEE_TIERS[1],
-    },
-    {
-        fromInvariant: true,
-        tokenX: TOKEN.UXD,
-        tokenY: TOKEN.MSOL,
-        tokenAmount: 0.2,
-        minUnitProfit: 1000,
-        invariantFee: INVARIANT_FEE_TIERS[1],
-    },
-    {
-        fromInvariant: false,
-        tokenX: TOKEN.UXD,
-        tokenY: TOKEN.MSOL,
-        tokenAmount: 0.2,
-        minUnitProfit: 1000,
+        tokenAmount: 0.25,
+        minUnitProfit: 500,
         invariantFee: INVARIANT_FEE_TIERS[1],
     }
 ]
@@ -185,7 +153,8 @@ async function simulateJupiter(jupiter, from, to, amount, slippage) {
         amount, // raw input amount of tokens
         slippage, // The slippage in % terms
         forceFetch: true, // false is the default value => will use cache if not older than routeCacheDuration
-        intermediateTokens: false // intermediateTokens, if provided will only find routes that use the intermediate tokens
+        onlyDirectRoutes: true, // It ensure only direct routing and also disable split trade trading
+        intermediateTokens: true, // intermediateTokens, if provided will only find routes that use the intermediate tokens
     });
     return routes;
 
@@ -214,7 +183,6 @@ async function main(SETTING) {
     if (tokenOutAmountInWallet.uiAmount > 0 && SETTING.tokenY.symbol === 'mSOL') {
         console.log("tokenOut amount should be zero");
         console.log(tokenOutAmountInWallet);
-        await sleep(60000);
         return;
     }
 
