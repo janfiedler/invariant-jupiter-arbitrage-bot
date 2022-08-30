@@ -191,11 +191,11 @@ async function main(LP) {
                 console.log("Processing Invariant swap");
                 const resultInvariantSwap = await swapInvariant(LP.fromInvariant, tokenInAmount, resultSimulateInvariant);
                 console.log("Invariant swap done", resultInvariantSwap);
-                await sleep(LPS.pauseAfterTransaction);
+                await sleep(SETTINGS.pauseAfterTransaction);
                 console.log("Processing Jupiter swap");
                 await swapJupiter(jupiter, resultSimulateJupiter.routesInfos[0]);
                 console.log("Jupiter swap done");
-                await sleep(LPS.pauseAfterTransaction);
+                await sleep(SETTINGS.pauseAfterTransaction);
             } else {
                 console.log("Swap in is bigger than swap out");
             }
