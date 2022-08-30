@@ -1,5 +1,7 @@
 #IDE
 .idea
+#CONFIGURATION
+config.js
 # Logs
 logs
 *.log

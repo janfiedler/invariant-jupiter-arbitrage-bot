@@ -7,12 +7,14 @@ const {fromFee, simulateSwap, toPercent} = require('@invariant-labs/sdk/lib/util
 const {Jupiter} = require("@jup-ag/core");
 const JSBI = require('jsbi');
 
-const {KEYPAIR, LOOP_TIMEOUT, RPC_ENDPOINT} = process.env;
+const {KEYPAIR, RPC_ENDPOINT} = process.env;
+
+const {SETTINGS, LPs} = require('./config');
 
 let secretKey = Uint8Array.from(JSON.parse(KEYPAIR));
 let keypair = Keypair.fromSecretKey(secretKey);
 
-let connection = new Connection(RPC_ENDPOINT, {confirmTransactionInitialTimeout: 60000});
+let connection = new Connection(RPC_ENDPOINT, {confirmTransactionInitialTimeout: 120000});
 
 const sleep = function (ms) {
     return new Promise(resolve => {
@@ -39,43 +41,14 @@ async function getTokenAddressBalance(tokenOutAddress) {
     tokenAccounts.value = tokenAccounts.value.filter(
         (token) => token.account.data.parsed.info.mint === tokenOutAddress
     );
+    //If tokenAccounts is empty, inform user need to create account for tokenOutAddress
+    if (tokenAccounts.value.length === 0) {
+        console.log(`Please first create account for tokenOutAddress ${tokenOutAddress}`);
+        process.exit(1);
+    }
     return tokenAccounts.value[0].account.data.parsed.info.tokenAmount;
 }
 
-const TOKEN = {
-    UXD: {address: '7kbnvuGBxxj8AG9qp8Scn56muWGaRaFqxg1FsRp3PaFT', symbol: 'UXD', decimals: 6},
-    USDH: {address: 'USDH1SM1ojwWUga67PGrgFWUHibbjqMvuMaDkRJTgkX', symbol: 'USDH', decimals: 6},
-    MSOL: {address: 'mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So', symbol: 'mSOL', decimals: 9},
-    USDC: {address: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', symbol: 'USDC', decimals: 6},
-}
-
-const INVARIANT_FEE_TIERS = [
-    {fee: fromFee(new anchor.BN(10))},
-    {fee: fromFee(new anchor.BN(50))},
-    {fee: fromFee(new anchor.BN(100))},
-    {fee: fromFee(new anchor.BN(300))},
-    {fee: fromFee(new anchor.BN(1000))}
-]
-
-// Settings for LP's
-const SETTINGS = [
-    {
-        fromInvariant: true,
-        tokenX: TOKEN.USDC,
-        tokenY: TOKEN.MSOL,
-        tokenAmount: 0.25,
-        minUnitProfit: 500,
-        invariantFee: INVARIANT_FEE_TIERS[1],
-    },
-    {
-        fromInvariant: false,
-        tokenX: TOKEN.USDC,
-        tokenY: TOKEN.MSOL,
-        tokenAmount: 0.25,
-        minUnitProfit: 500,
-        invariantFee: INVARIANT_FEE_TIERS[1],
-    }
-]
 
 const tempInvariant = {
     tokenXAddress: null,
@@ -153,7 +126,7 @@ async function simulateJupiter(jupiter, from, to, amount, slippage) {
         amount, // raw input amount of tokens
         slippage, // The slippage in % terms
         forceFetch: true, // false is the default value => will use cache if not older than routeCacheDuration
-        onlyDirectRoutes: true, // It ensure only direct routing and also disable split trade trading
+        onlyDirectRoutes: SETTINGS.JUPITER.onlyDirectRoutes ?? false, // It ensures only direct routing and also disable split trade trading
         intermediateTokens: true, // intermediateTokens, if provided will only find routes that use the intermediate tokens
     });
     return routes;
@@ -217,11 +190,11 @@ async function main(SETTING) {
                 console.log("Processing Invariant swap");
                 const resultInvariantSwap = await swapInvariant(SETTING.fromInvariant, tokenInAmount, resultSimulateInvariant);
                 console.log("Invariant swap done", resultInvariantSwap);
-                await sleep(5000);
+                await sleep(SETTINGS.pauseAfterTransaction);
                 console.log("Processing Jupiter swap");
                 await swapJupiter(jupiter, resultSimulateJupiter.routesInfos[0]);
                 console.log("Jupiter swap done");
-                await sleep(5000);
+                await sleep(SETTINGS.pauseAfterTransaction);
             } else {
                 console.log("Swap in is bigger than swap out");
             }
@@ -246,11 +219,11 @@ async function main(SETTING) {
                 console.log("Processing jupiter swap");
                 const resultJupiter = await swapJupiter(jupiter, resultSimulateJupiter.routesInfos[0]);
                 console.log("Jupiter swap done");
-                await sleep(5000);
+                await sleep(SETTINGS.pauseAfterTransaction);
                 console.log("Processing Invariant swap");
                 const resultInvariantSwap = await swapInvariant(SETTING.fromInvariant, resultJupiter.outputAmount, resultSimulateInvariant);
                 console.log("Invariant swap done", resultInvariantSwap);
-                await sleep(5000);
+                await sleep(SETTINGS.pauseAfterTransaction);
             } else {
                 console.log("Swap in is bigger than swap out");
             }
@@ -263,11 +236,11 @@ async function main(SETTING) {
 
 async function begin() {
     // Loop through all settings
-    for (const SETTING of SETTINGS) {
+    for (const LP of LPs) {
         // Call main function with current setting
-        await main(SETTING);
+        await main(LP);
     }
-    await sleep(LOOP_TIMEOUT * 1000);
+    await sleep(SETTINGS.LOOP_TIMEOUT * 1000);
     begin();
 }
 
