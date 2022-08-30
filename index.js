@@ -146,7 +146,7 @@ async function swapJupiter(jupiter, routes) {
 }
 
 // create and call async main function
-async function main(LP) {
+async function main(LP, jupiter) {
 
     //Create console log with divider
     console.log('-----------------------------------------------------------------------------------------------------------------');
@@ -161,15 +161,6 @@ async function main(LP) {
     }
 
     try {
-        //Init jupiter
-        const jupiter = await Jupiter.load({
-            connection,
-            cluster: "mainnet-beta",
-            user: keypair, // or public key
-            // platformFeeAndAccounts:  NO_PLATFORM_FEE,
-            routeCacheDuration: 10_000, // Will not refetch data on computeRoutes for up to 10 seconds
-        });
-
         if (LP.fromInvariant) {
             const tokenInAmount = transferAmountToSolana(
                 LP.tokenAmount,
@@ -235,17 +226,25 @@ async function main(LP) {
     }
 }
 
-async function begin() {
+async function begin(jupiter) {
     // Loop through all settings
     for (const LP of LPs) {
         // Call main function with current setting
-        await main(LP);
+        await main(LP, jupiter);
     }
     await sleep(SETTINGS.LOOP_TIMEOUT * 1000);
-    begin();
+    begin(jupiter);
 }
 
 // Create empty async function that start immediately
 (async () => {
-    begin();
+    //Init jupiter
+    const jupiter = await Jupiter.load({
+        connection,
+        cluster: "mainnet-beta",
+        user: keypair, // or public key
+        // platformFeeAndAccounts:  NO_PLATFORM_FEE,
+        routeCacheDuration: 10_000, // Will not refetch data on computeRoutes for up to 10 seconds
+    });
+    begin(jupiter);
 })();
