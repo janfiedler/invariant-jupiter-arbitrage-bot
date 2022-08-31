@@ -16,14 +16,6 @@ const INVARIANT_FEE_TIERS = [
     {fee: fromFee(new anchor.BN(1000))}
 ]
 
-let SETTINGS = {
-    pauseAfterTransaction: 2500, // In miliseconds to wait after nodes sync
-    LOOP_TIMEOUT: 30,
-    JUPITER: {
-        onlyDirectRoutes: false, // It ensures only direct routing and also disable split trade trading
-    }
-}
-
 // Settings for LP's
 const LPs = [
     {
@@ -33,6 +25,14 @@ const LPs = [
         tokenAmount: 0.25,
         minUnitProfit: 400,
         invariantFee: INVARIANT_FEE_TIERS[1],
+        data: {
+            state: 0, // 0 - not started, 1 - bought tokenY
+            xTokenInitialAmount: 0, // Amount after format from tokenAmount
+            resultSimulateInvariant: null,
+            resultSimulateJupiter: null,
+            yTokenBoughtAmount: 0,
+            errorCounter: 0,
+        }
     },
     {
         fromInvariant: false,
@@ -41,9 +41,34 @@ const LPs = [
         tokenAmount: 0.25,
         minUnitProfit: 400,
         invariantFee: INVARIANT_FEE_TIERS[1],
+        data: {
+            state: 0, // 0 - not started, 1 - bought tokenY
+            xTokenInitialAmount: 0, // Amount after format from tokenAmount
+            resultSimulateInvariant: null,
+            resultSimulateJupiter: null,
+            yTokenBoughtAmount: 0,
+            errorCounter: 0,
+        }
     }
 ];
 
+const SETTINGS = {
+    pauseAfterTransaction: 2500, // In miliseconds to wait after nodes sync
+    LOOP_TIMEOUT: 30,
+    JUPITER: {
+        onlyDirectRoutes: false, // It ensures only direct routing and also disable split trade trading
+    }
+}
+
+const tempInvariant = {
+    tokenXAddress: null,
+    tokenYAddress: null,
+    market: null,
+    pair: null,
+    poolData: null,
+    slippage: null
+};
+
 module.exports = {
-    SETTINGS, LPs
+    LPs, SETTINGS, tempInvariant
 }

@@ -9,7 +9,7 @@ const JSBI = require('jsbi');
 
 const {KEYPAIR, RPC_ENDPOINT} = process.env;
 
-const {SETTINGS, LPs} = require('./config');
+const {LPs, SETTINGS, tempInvariant} = require('./config');
 
 let secretKey = Uint8Array.from(JSON.parse(KEYPAIR));
 let keypair = Keypair.fromSecretKey(secretKey);
@@ -25,6 +25,10 @@ const sleep = function (ms) {
 
 const transferAmountToSolana = function (value, digits) {
     return Math.round(value * Math.pow(10, digits));
+};
+
+const transferAmountToUi = function (value, digits) {
+    return value / Math.pow(10, digits);
 };
 
 function relDiff(a, b) {
@@ -48,16 +52,6 @@ async function getTokenAddressBalance(tokenOutAddress) {
     }
     return tokenAccounts.value[0].account.data.parsed.info.tokenAmount;
 }
-
-
-const tempInvariant = {
-    tokenXAddress: null,
-    tokenYAddress: null,
-    market: null,
-    pair: null,
-    poolData: null,
-    slippage: null
-};
 
 async function simulateInvariant(LP, amountIn) {
     const {fromInvariant, tokenX, tokenY, invariantFee} = LP;
@@ -145,81 +139,133 @@ async function swapJupiter(jupiter, routes) {
     return swapResult;
 }
 
+async function verifyRequiredBalance(LP) {
+    const tokenOutAmountInWallet = await getTokenAddressBalance(LP.tokenY.address);
+
+    if (tokenOutAmountInWallet.uiAmount < transferAmountToUi(
+        LP.data.yTokenBoughtAmount,
+        LP.tokenY.decimals
+    )) {
+        console.log("Required bought amount is not in wallet");
+        console.log(tokenOutAmountInWallet);
+        LP.data.errorCounter++;
+        if (LP.data.errorCounter > 5) {
+            console.log("Error counter is more than 5, reset setting due to false error");
+            LP.data.state = 0;
+        }
+        return false;
+    } else {
+        console.log("Required amount is in wallet");
+        console.log(tokenOutAmountInWallet);
+        LP.data.errorCounter = 0;
+        return true;
+    }
+}
+
 // create and call async main function
 async function main(LP, jupiter) {
 
     //Create console log with divider
     console.log('-----------------------------------------------------------------------------------------------------------------');
     console.log(`Processing ${LP.tokenX.symbol} / ${LP.tokenY.symbol} with amount ${LP.tokenAmount} and fromInvariant ${LP.fromInvariant}`);
-    const tokenOutAmountInWallet = await getTokenAddressBalance(LP.tokenY.address);
-
-    // If tokenOut is not zero in the wallet, something happened, exit process
-    if (tokenOutAmountInWallet.uiAmount > 0.000001 && LP.tokenY.symbol === 'mSOL') {
-        console.log("tokenOut amount should be zero");
-        console.log(tokenOutAmountInWallet);
-        return;
-    }
 
     try {
         if (LP.fromInvariant) {
-            const tokenInAmount = transferAmountToSolana(
-                LP.tokenAmount,
-                LP.tokenX.decimals
-            );
-            const resultSimulateInvariant = await simulateInvariant(LP, tokenInAmount);
-            console.log(`Invarinat => ${resultSimulateInvariant.accumulatedAmountIn.add(resultSimulateInvariant.accumulatedFee).toString()} ${LP.tokenX.symbol} => ${resultSimulateInvariant.accumulatedAmountOut.toString()} ${LP.tokenY.symbol}`)
+            if (LP.data.state === 0) {
+                LP.data.xTokenInitialAmount = transferAmountToSolana(
+                    LP.tokenAmount,
+                    LP.tokenX.decimals
+                );
+                LP.data.resultSimulateInvariant = await simulateInvariant(LP, LP.data.xTokenInitialAmount);
+                console.log(`Invarinat => ${LP.data.resultSimulateInvariant.accumulatedAmountIn.add(LP.data.resultSimulateInvariant.accumulatedFee).toString()} ${LP.tokenX.symbol} => ${LP.data.resultSimulateInvariant.accumulatedAmountOut.toString()} ${LP.tokenY.symbol}`)
+                LP.data.yTokenBoughtAmount = LP.data.resultSimulateInvariant.accumulatedAmountOut;
 
-            const resultSimulateJupiter = await simulateJupiter(jupiter, LP.tokenY, LP.tokenX, JSBI.BigInt(resultSimulateInvariant.accumulatedAmountOut), 1);
-            console.log(`Jupiter => ${JSBI.toNumber(resultSimulateJupiter.routesInfos[0].inAmount)} ${LP.tokenY.symbol} => ${JSBI.toNumber(resultSimulateJupiter.routesInfos[0].outAmount)} ${LP.tokenX.symbol}`)
+                LP.data.resultSimulateJupiter = await simulateJupiter(jupiter, LP.tokenY, LP.tokenX, JSBI.BigInt(LP.data.yTokenBoughtAmount), 1);
+                console.log(`Jupiter => ${JSBI.toNumber(LP.data.resultSimulateJupiter.routesInfos[0].inAmount)} ${LP.tokenY.symbol} => ${JSBI.toNumber(LP.data.resultSimulateJupiter.routesInfos[0].outAmount)} ${LP.tokenX.symbol}`)
+            }
 
-            const fromInAmount = Number(resultSimulateInvariant.accumulatedAmountIn.add(resultSimulateInvariant.accumulatedFee));
-            const toOutAmount = JSBI.toNumber(resultSimulateJupiter.routesInfos[0].outAmount);
-            //console.log("fromInAmount", fromInAmount);
+            const toOutAmount = JSBI.toNumber(LP.data.resultSimulateJupiter.routesInfos[0].outAmount);
+            //console.log("fromInAmount", LP.data.xTokenInitialAmount);
             //console.log("toOutAmount", toOutAmount);
-            console.log("diff", (toOutAmount - fromInAmount));
-            if ((toOutAmount > fromInAmount) && ((toOutAmount - fromInAmount) > LP.minUnitProfit)) {
-                console.log("Swap out is bigger than swap in");
-                console.log("Processing Invariant swap");
-                const resultInvariantSwap = await swapInvariant(LP.fromInvariant, tokenInAmount, resultSimulateInvariant);
-                console.log("Invariant swap done", resultInvariantSwap);
-                await sleep(SETTINGS.pauseAfterTransaction);
+            console.log("diff", (toOutAmount - LP.data.xTokenInitialAmount));
+            if ((toOutAmount > LP.data.xTokenInitialAmount) && ((toOutAmount - LP.data.xTokenInitialAmount) > LP.minUnitProfit)) {
+                if (LP.data.state === 0) {
+                    console.log("Swap out is bigger than swap in");
+                    console.log("Processing Invariant swap");
+                    const resultInvariantSwap = await swapInvariant(LP.fromInvariant, LP.data.xTokenInitialAmount, LP.data.resultSimulateInvariant);
+                    console.log("Invariant swap done", resultInvariantSwap);
+                    if (resultInvariantSwap) {
+                        LP.data.state = 1
+                    }
+                    await sleep(SETTINGS.pauseAfterTransaction);
+                } else if (LP.data.state === 1) {
+                    console.log("Continue with Jupiter swap after some error");
+                    //Need verification of balance after failed swap
+                    const resultRequiredBalance = await verifyRequiredBalance(LP);
+                    if (!resultRequiredBalance) {
+                        return;
+                    }
+                }
+
                 console.log("Processing Jupiter swap");
-                await swapJupiter(jupiter, resultSimulateJupiter.routesInfos[0]);
-                console.log("Jupiter swap done");
+                const resultJupiterSwap = await swapJupiter(jupiter, LP.data.resultSimulateJupiter.routesInfos[0]);
+                if (resultJupiterSwap.txid) {
+                    LP.data.state = 0;
+                    console.log("Jupiter swap done");
+                }
                 await sleep(SETTINGS.pauseAfterTransaction);
             } else {
                 console.log("Swap in is bigger than swap out");
             }
         } else {
-            const tokenInAmount = transferAmountToSolana(
-                LP.tokenAmount,
-                LP.tokenX.decimals
-            );
-            const resultSimulateJupiter = await simulateJupiter(jupiter, LP.tokenX, LP.tokenY, JSBI.BigInt(tokenInAmount), 1);
-            console.log(`Jupiter => ${JSBI.toNumber(resultSimulateJupiter.routesInfos[0].inAmount)} ${LP.tokenX.symbol} => ${JSBI.toNumber(resultSimulateJupiter.routesInfos[0].outAmount)} ${LP.tokenY.symbol}`)
+            if (LP.data.state === 0) {
+                LP.data.xTokenInitialAmount = transferAmountToSolana(
+                    LP.tokenAmount,
+                    LP.tokenX.decimals
+                );
+                LP.data.resultSimulateJupiter = await simulateJupiter(jupiter, LP.tokenX, LP.tokenY, JSBI.BigInt(LP.data.xTokenInitialAmount), 1);
+                console.log(`Jupiter => ${JSBI.toNumber(LP.data.resultSimulateJupiter.routesInfos[0].inAmount)} ${LP.tokenX.symbol} => ${JSBI.toNumber(LP.data.resultSimulateJupiter.routesInfos[0].outAmount)} ${LP.tokenY.symbol}`)
+                LP.data.yTokenBoughtAmount = JSBI.toNumber(LP.data.resultSimulateJupiter.routesInfos[0].outAmount);
 
-            const resultSimulateInvariant = await simulateInvariant(LP, JSBI.toNumber(resultSimulateJupiter.routesInfos[0].outAmount));
-            console.log(`Invariant => ${resultSimulateInvariant.accumulatedAmountIn} (fee:${resultSimulateInvariant.accumulatedFee}) ${LP.tokenY.symbol} => ${resultSimulateInvariant.accumulatedAmountOut.toString()} ${LP.tokenX.symbol}`)
+                LP.data.resultSimulateInvariant = await simulateInvariant(LP, LP.data.yTokenBoughtAmount);
+                console.log(`Invariant => ${LP.data.resultSimulateInvariant.accumulatedAmountIn} (fee:${LP.data.resultSimulateInvariant.accumulatedFee}) ${LP.tokenY.symbol} => ${LP.data.resultSimulateInvariant.accumulatedAmountOut.toString()} ${LP.tokenX.symbol}`)
+            }
 
-            const fromInAmount = JSBI.toNumber(resultSimulateJupiter.routesInfos[0].inAmount);
-            const toOutAmount = Number(resultSimulateInvariant.accumulatedAmountOut);
-            //console.log("fromInAmount", fromInAmount);
+            const toOutAmount = Number(LP.data.resultSimulateInvariant.accumulatedAmountOut);
+            //console.log("fromInAmount", LP.data.xTokenInitialAmount);
             //console.log("toOutAmount", toOutAmount);
-            console.log("diff", (toOutAmount - fromInAmount));
-            if ((toOutAmount > fromInAmount) && ((toOutAmount - fromInAmount) > LP.minUnitProfit)) {
-                console.log("Swap out is bigger than swap in");
-                console.log("Processing jupiter swap");
-                const resultJupiter = await swapJupiter(jupiter, resultSimulateJupiter.routesInfos[0]);
-                console.log("Jupiter swap done");
-                await sleep(SETTINGS.pauseAfterTransaction);
+            console.log("diff", (toOutAmount - LP.data.xTokenInitialAmount));
+            if ((toOutAmount > LP.data.xTokenInitialAmount) && ((toOutAmount - LP.data.xTokenInitialAmount) > LP.minUnitProfit)) {
+                if (LP.data.state === 0) {
+                    console.log("Swap out is bigger than swap in");
+                    console.log("Processing jupiter swap");
+                    const resultJupiterSwap = await swapJupiter(jupiter, LP.data.resultSimulateJupiter.routesInfos[0]);
+
+                    if (resultJupiterSwap.txid) {
+                        LP.data.state = 1;
+                        LP.data.yTokenBoughtAmount = resultJupiterSwap.outputAmount;
+                        console.log("Jupiter swap done");
+                        await sleep(SETTINGS.pauseAfterTransaction);
+                    }
+
+                } else if (LP.data.state === 1) {
+                    console.log("Continue with Invariant swap after some error");
+                    //Need verification of balance after failed swap
+                    const resultRequiredBalance = await verifyRequiredBalance(LP);
+                    if (!resultRequiredBalance) {
+                        return;
+                    }
+                }
                 console.log("Processing Invariant swap");
-                const resultInvariantSwap = await swapInvariant(LP.fromInvariant, resultJupiter.outputAmount, resultSimulateInvariant);
-                console.log("Invariant swap done", resultInvariantSwap);
-                await sleep(SETTINGS.pauseAfterTransaction);
+                const resultInvariantSwap = await swapInvariant(LP.fromInvariant, LP.data.yTokenBoughtAmount, LP.data.resultSimulateInvariant);
+                if (resultInvariantSwap) {
+                    LP.data.state = 0;
+                    console.log("Invariant swap done", resultInvariantSwap);
+                    await sleep(SETTINGS.pauseAfterTransaction);
+                }
             } else {
                 console.log("Swap in is bigger than swap out");
             }
-
         }
     } catch (error) {
         console.log(error);
