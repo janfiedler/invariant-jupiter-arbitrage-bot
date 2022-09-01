@@ -6,6 +6,7 @@ const TOKEN = {
     USDH: {address: 'USDH1SM1ojwWUga67PGrgFWUHibbjqMvuMaDkRJTgkX', symbol: 'USDH', decimals: 6},
     MSOL: {address: 'mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So', symbol: 'mSOL', decimals: 9},
     USDC: {address: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', symbol: 'USDC', decimals: 6},
+    SNY: {address: '4dmKkXNHdgYsXqBHCuMikNQWwVomZURhYvkkX5c4pQ7y', symbol: 'SNY', decimals: 6},
 }
 
 const INVARIANT_FEE_TIERS = [
@@ -15,6 +16,15 @@ const INVARIANT_FEE_TIERS = [
     {fee: fromFee(new anchor.BN(300))},
     {fee: fromFee(new anchor.BN(1000))}
 ]
+// Date template for LPs
+const dataTemplate = {
+    state: 0, // 0 - not started, 1 - bought tokenY
+    xTokenInitialAmount: 0, // Amount after format from tokenAmount
+    resultSimulateInvariant: null,
+    resultSimulateJupiter: null,
+    yTokenBoughtAmount: 0,
+    errorCounter: 0,
+}
 
 // Settings for LP's
 const LPs = [
@@ -22,33 +32,19 @@ const LPs = [
         fromInvariant: true, // If true, first buy tokenY on invariant and then sell for tokenX on jupiter. False is the opposite.
         tokenX: TOKEN.USDC,
         tokenY: TOKEN.MSOL,
-        tokenAmount: 0.25,
-        minUnitProfit: 400,
+        tokenAmount: 0.12,
+        minUnitProfit: 100,
         invariantFee: INVARIANT_FEE_TIERS[1],
-        data: {
-            state: 0, // 0 - not started, 1 - bought tokenY
-            xTokenInitialAmount: 0, // Amount after format from tokenAmount
-            resultSimulateInvariant: null,
-            resultSimulateJupiter: null,
-            yTokenBoughtAmount: 0,
-            errorCounter: 0,
-        }
+        data: {...dataTemplate}
     },
     {
         fromInvariant: false,
         tokenX: TOKEN.USDC,
         tokenY: TOKEN.MSOL,
-        tokenAmount: 0.25,
-        minUnitProfit: 400,
+        tokenAmount: 0.12,
+        minUnitProfit: 100,
         invariantFee: INVARIANT_FEE_TIERS[1],
-        data: {
-            state: 0, // 0 - not started, 1 - bought tokenY
-            xTokenInitialAmount: 0, // Amount after format from tokenAmount
-            resultSimulateInvariant: null,
-            resultSimulateJupiter: null,
-            yTokenBoughtAmount: 0,
-            errorCounter: 0,
-        }
+        data: {...dataTemplate}
     }
 ];
 

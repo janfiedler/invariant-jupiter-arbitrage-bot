@@ -141,22 +141,25 @@ async function swapJupiter(jupiter, routes) {
 
 async function verifyRequiredBalance(LP) {
     const tokenOutAmountInWallet = await getTokenAddressBalance(LP.tokenY.address);
-
+    console.log("LP.tokenY.address", LP.tokenY.address);
     if (tokenOutAmountInWallet.uiAmount < transferAmountToUi(
         LP.data.yTokenBoughtAmount,
         LP.tokenY.decimals
     )) {
-        console.log("Required bought amount is not in wallet");
+        console.log("Required bought amount is not in wallet", LP.data.yTokenBoughtAmount);
         console.log(tokenOutAmountInWallet);
         LP.data.errorCounter++;
-        if (LP.data.errorCounter > 5) {
-            console.log("Error counter is more than 5, reset setting due to false error");
-            LP.data.state = 0;
+        if (LP.data.errorCounter > 10) {
+            console.log("Error counter is more than 10, reset setting due to false error");
+            //LP.data.state = 0;
+            console.log(LP.data);
+            process.exit(1);
         }
         return false;
     } else {
         console.log("Required amount is in wallet");
         console.log(tokenOutAmountInWallet);
+        console.log(LP.data);
         LP.data.errorCounter = 0;
         return true;
     }
@@ -240,8 +243,11 @@ async function main(LP, jupiter) {
                     console.log("Swap out is bigger than swap in");
                     console.log("Processing jupiter swap");
                     const resultJupiterSwap = await swapJupiter(jupiter, LP.data.resultSimulateJupiter.routesInfos[0]);
-
-                    if (resultJupiterSwap.txid) {
+                    if (resultJupiterSwap.error) {
+                        // For case, this error was false, set state to 1 to revalidate swap
+                        LP.data.state = 1;
+                        return;
+                    } else if (resultJupiterSwap.txid) {
                         LP.data.state = 1;
                         LP.data.yTokenBoughtAmount = resultJupiterSwap.outputAmount;
                         console.log("Jupiter swap done");
