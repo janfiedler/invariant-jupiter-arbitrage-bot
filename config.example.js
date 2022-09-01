@@ -1,4 +1,4 @@
-const {fromFee} = require("@invariant-labs/sdk/lib/utils");
+const {fromFee,toPercent} = require("@invariant-labs/sdk/lib/utils");
 const anchor = require("@project-serum/anchor");
 
 const TOKEN = {
@@ -19,6 +19,17 @@ const INVARIANT_FEE_TIERS = [
 // Date template for LPs
 const dataTemplate = {
     state: 0, // 0 - not started, 1 - bought tokenY
+    invariant: {
+        tokenXAddress: null,
+        tokenYAddress: null,
+        market: null,
+        pair: null,
+        poolData: null,
+        slippage: toPercent(5, 1)
+    },
+    jupiter: {
+        slippage: 5
+    },
     xTokenInitialAmount: 0, // Amount after format from tokenAmount
     resultSimulateInvariant: null,
     resultSimulateJupiter: null,
@@ -56,15 +67,6 @@ const SETTINGS = {
     }
 }
 
-const tempInvariant = {
-    tokenXAddress: null,
-    tokenYAddress: null,
-    market: null,
-    pair: null,
-    poolData: null,
-    slippage: null
-};
-
 module.exports = {
-    LPs, SETTINGS, tempInvariant
+    LPs, SETTINGS
 }

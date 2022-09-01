@@ -3,13 +3,13 @@ const anchor = require("@project-serum/anchor");
 const {TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID} = require("@solana/spl-token");
 const {Market, Pair, Network} = require('@invariant-labs/sdk')
 const {Keypair, PublicKey, Connection} = require('@solana/web3.js');
-const {fromFee, simulateSwap, toPercent} = require('@invariant-labs/sdk/lib/utils')
+const {fromFee, simulateSwap} = require('@invariant-labs/sdk/lib/utils')
 const {Jupiter} = require("@jup-ag/core");
 const JSBI = require('jsbi');
 
 const {KEYPAIR, RPC_ENDPOINT} = process.env;
 
-const {LPs, SETTINGS, tempInvariant} = require('./config');
+const {LPs, SETTINGS} = require('./config');
 
 let secretKey = Uint8Array.from(JSON.parse(KEYPAIR));
 let keypair = Keypair.fromSecretKey(secretKey);
@@ -54,36 +54,36 @@ async function getTokenAddressBalance(tokenOutAddress) {
 }
 
 async function simulateInvariant(LP, amountIn) {
-    const {fromInvariant, tokenX, tokenY, invariantFee} = LP;
-    tempInvariant.tokenXAddress = tokenX.address;
-    tempInvariant.tokenYAddress = tokenY.address;
-    tempInvariant.market = await Market.build(Network.MAIN, keypair, connection);
-    tempInvariant.pair = new Pair(new PublicKey(tempInvariant.tokenXAddress), new PublicKey(tempInvariant.tokenYAddress), invariantFee);
-    tempInvariant.poolData = await tempInvariant.market.getPool(tempInvariant.pair);
-    tempInvariant.slippage = toPercent(1, 1);
+    const {fromInvariant, tokenX, tokenY, invariantFee, data} = LP;
+    data.invariant.tokenXAddress = tokenX.address;
+    data.invariant.tokenYAddress = tokenY.address;
+    data.invariant.market = await Market.build(Network.MAIN, keypair, connection);
+    data.invariant.pair = new Pair(new PublicKey(data.invariant.tokenXAddress), new PublicKey(data.invariant.tokenYAddress), invariantFee);
+    data.invariant.poolData = await data.invariant.market.getPool(data.invariant.pair);
+
     const result = await simulateSwap({
         xToY: fromInvariant,
         byAmountIn: true,
         swapAmount: new anchor.BN(amountIn),
-        priceLimit: tempInvariant.poolData.sqrtPrice,
-        slippage: tempInvariant.slippage,
-        tickmap: await tempInvariant.market.getTickmap(tempInvariant.pair),
-        pool: tempInvariant.poolData
+        priceLimit: data.invariant.poolData.sqrtPrice,
+        slippage: data.invariant.slippage,
+        tickmap: await data.invariant.market.getTickmap(data.invariant.pair),
+        pool: data.invariant.poolData
     });
 
-    //console.log(tempInvariant.poolData.liquidity.v.toString())
+    //console.log(data.invariant.poolData.liquidity.v.toString())
     return result;
 }
 
-async function swapInvariant(fromInvariant, amount, result) {
-
+async function swapInvariant(LP, amount) {
+    const {fromInvariant, data} = LP;
     // Get the associated account for the token in wallet.
     const [accountX, accountY] = await Promise.all([
         PublicKey.findProgramAddress(
             [
                 keypair.publicKey.toBuffer(),
                 TOKEN_PROGRAM_ID.toBuffer(),
-                new PublicKey(tempInvariant.tokenXAddress).toBuffer(),
+                new PublicKey(data.invariant.tokenXAddress).toBuffer(),
             ],
             ASSOCIATED_TOKEN_PROGRAM_ID
         ),
@@ -91,7 +91,7 @@ async function swapInvariant(fromInvariant, amount, result) {
             [
                 keypair.publicKey.toBuffer(),
                 TOKEN_PROGRAM_ID.toBuffer(),
-                new PublicKey(tempInvariant.tokenYAddress).toBuffer(),
+                new PublicKey(data.invariant.tokenYAddress).toBuffer(),
             ],
             ASSOCIATED_TOKEN_PROGRAM_ID
         )
@@ -103,22 +103,23 @@ async function swapInvariant(fromInvariant, amount, result) {
         accountY: accountY[0],
         amount: new anchor.BN(amount),
         byAmountIn: true,
-        estimatedPriceAfterSwap: {v: result.priceAfterSwap},
-        slippage: {v: fromFee(new anchor.BN(1000))},
-        pair: tempInvariant.pair,
+        estimatedPriceAfterSwap: {v: data.resultSimulateInvariant.priceAfterSwap},
+        slippage: data.invariant.slippage,
+        pair: data.invariant.pair,
         owner: keypair.publicKey,
     }
 
     //Perform the swap
-    return await tempInvariant.market.swap(swapVars, keypair);
+    return await data.invariant.market.swap(swapVars, keypair);
 }
 
-async function simulateJupiter(jupiter, from, to, amount, slippage) {
+async function simulateJupiter(jupiter, LP, from, to, amount) {
+    const {data} = LP;
     const routes = await jupiter.computeRoutes({
         inputMint: new PublicKey(from.address), // Mint address of the input token
         outputMint: new PublicKey(to.address), // Mint address of the output token
         amount, // raw input amount of tokens
-        slippage, // The slippage in % terms
+        slippage: data.jupiter.slippage, // The slippage in % terms
         forceFetch: true, // false is the default value => will use cache if not older than routeCacheDuration
         onlyDirectRoutes: SETTINGS.JUPITER.onlyDirectRoutes ?? false, // It ensures only direct routing and also disable split trade trading
         intermediateTokens: true, // intermediateTokens, if provided will only find routes that use the intermediate tokens
@@ -183,7 +184,7 @@ async function main(LP, jupiter) {
                 console.log(`Invarinat => ${LP.data.resultSimulateInvariant.accumulatedAmountIn.add(LP.data.resultSimulateInvariant.accumulatedFee).toString()} ${LP.tokenX.symbol} => ${LP.data.resultSimulateInvariant.accumulatedAmountOut.toString()} ${LP.tokenY.symbol}`)
                 LP.data.yTokenBoughtAmount = LP.data.resultSimulateInvariant.accumulatedAmountOut;
 
-                LP.data.resultSimulateJupiter = await simulateJupiter(jupiter, LP.tokenY, LP.tokenX, JSBI.BigInt(LP.data.yTokenBoughtAmount), 1);
+                LP.data.resultSimulateJupiter = await simulateJupiter(jupiter, LP, LP.tokenY, LP.tokenX, JSBI.BigInt(LP.data.yTokenBoughtAmount));
                 console.log(`Jupiter => ${JSBI.toNumber(LP.data.resultSimulateJupiter.routesInfos[0].inAmount)} ${LP.tokenY.symbol} => ${JSBI.toNumber(LP.data.resultSimulateJupiter.routesInfos[0].outAmount)} ${LP.tokenX.symbol}`)
             }
 
@@ -195,7 +196,7 @@ async function main(LP, jupiter) {
                 if (LP.data.state === 0) {
                     console.log("Swap out is bigger than swap in");
                     console.log("Processing Invariant swap");
-                    const resultInvariantSwap = await swapInvariant(LP.fromInvariant, LP.data.xTokenInitialAmount, LP.data.resultSimulateInvariant);
+                    const resultInvariantSwap = await swapInvariant(LP, LP.data.xTokenInitialAmount);
                     console.log("Invariant swap done", resultInvariantSwap);
                     if (resultInvariantSwap) {
                         LP.data.state = 1
@@ -226,7 +227,7 @@ async function main(LP, jupiter) {
                     LP.tokenAmount,
                     LP.tokenX.decimals
                 );
-                LP.data.resultSimulateJupiter = await simulateJupiter(jupiter, LP.tokenX, LP.tokenY, JSBI.BigInt(LP.data.xTokenInitialAmount), 1);
+                LP.data.resultSimulateJupiter = await simulateJupiter(jupiter, LP, LP.tokenX, LP.tokenY, JSBI.BigInt(LP.data.xTokenInitialAmount));
                 console.log(`Jupiter => ${JSBI.toNumber(LP.data.resultSimulateJupiter.routesInfos[0].inAmount)} ${LP.tokenX.symbol} => ${JSBI.toNumber(LP.data.resultSimulateJupiter.routesInfos[0].outAmount)} ${LP.tokenY.symbol}`)
                 LP.data.yTokenBoughtAmount = JSBI.toNumber(LP.data.resultSimulateJupiter.routesInfos[0].outAmount);
 
@@ -253,7 +254,6 @@ async function main(LP, jupiter) {
                         console.log("Jupiter swap done");
                         await sleep(SETTINGS.pauseAfterTransaction);
                     }
-
                 } else if (LP.data.state === 1) {
                     console.log("Continue with Invariant swap after some error");
                     //Need verification of balance after failed swap
@@ -263,7 +263,7 @@ async function main(LP, jupiter) {
                     }
                 }
                 console.log("Processing Invariant swap");
-                const resultInvariantSwap = await swapInvariant(LP.fromInvariant, LP.data.yTokenBoughtAmount, LP.data.resultSimulateInvariant);
+                const resultInvariantSwap = await swapInvariant(LP, LP.data.yTokenBoughtAmount);
                 if (resultInvariantSwap) {
                     LP.data.state = 0;
                     console.log("Invariant swap done", resultInvariantSwap);
