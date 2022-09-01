@@ -149,11 +149,11 @@ async function verifyRequiredBalance(LP) {
         console.log("Required bought amount is not in wallet", LP.data.yTokenBoughtAmount);
         console.log(tokenOutAmountInWallet);
         LP.data.errorCounter++;
-        if (LP.data.errorCounter > 10) {
-            console.log("Error counter is more than 10, reset setting due to false error");
-            //LP.data.state = 0;
+        if (LP.data.errorCounter >= 3) {
+            console.log("Error counter is more than 3, reset setting due to false error");
+            LP.data.state = 0;
             console.log(LP.data);
-            process.exit(1);
+            //process.exit(1);
         }
         return false;
     } else {
