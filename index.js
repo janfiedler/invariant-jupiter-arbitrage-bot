@@ -193,7 +193,12 @@ async function main(LP, jupiter) {
             //console.log("toOutAmount", toOutAmount);
             console.log("diff", (toOutAmount - LP.data.xTokenInitialAmount));
             if ((toOutAmount > LP.data.xTokenInitialAmount) && ((toOutAmount - LP.data.xTokenInitialAmount) > LP.minUnitProfit)) {
-                if (LP.data.state === 0) {
+                console.log("Processing Invariant & Jupiter swap in parallel");
+                const [resultInvariantSwap, resultJupiterSwap] = await Promise.all([
+                    swapInvariant(LP, LP.data.xTokenInitialAmount),
+                    swapJupiter(jupiter, LP.data.resultSimulateJupiter.routesInfos[0])
+                ]);
+/*                if (LP.data.state === 0) {
                     console.log("Swap out is bigger than swap in");
                     console.log("Processing Invariant swap");
                     const resultInvariantSwap = await swapInvariant(LP, LP.data.xTokenInitialAmount);
@@ -215,6 +220,15 @@ async function main(LP, jupiter) {
                 const resultJupiterSwap = await swapJupiter(jupiter, LP.data.resultSimulateJupiter.routesInfos[0]);
                 if (resultJupiterSwap.txid) {
                     LP.data.state = 0;
+                    console.log("Jupiter swap done");
+                }*/
+                if (resultInvariantSwap) {
+                    console.log("Invariant swap done", resultInvariantSwap);
+                }
+                if (resultJupiterSwap.error) {
+                    // For case, this error was false, set state to 1 to revalidate swap
+                    console.log("Jupiter swap error", resultJupiterSwap.error);
+                } else if (resultJupiterSwap.txid) {
                     console.log("Jupiter swap done");
                 }
                 await sleep(SETTINGS.pauseAfterTransaction);
@@ -240,7 +254,12 @@ async function main(LP, jupiter) {
             //console.log("toOutAmount", toOutAmount);
             console.log("diff", (toOutAmount - LP.data.xTokenInitialAmount));
             if ((toOutAmount > LP.data.xTokenInitialAmount) && ((toOutAmount - LP.data.xTokenInitialAmount) > LP.minUnitProfit)) {
-                if (LP.data.state === 0) {
+                console.log("Processing Invariant & Jupiter swap in parallel");
+                const [resultJupiterSwap, resultInvariantSwap] = await Promise.all([
+                    swapJupiter(jupiter, LP.data.resultSimulateJupiter.routesInfos[0]),
+                    swapInvariant(LP, LP.data.yTokenBoughtAmount)
+                ]);
+/*                if (LP.data.state === 0) {
                     console.log("Swap out is bigger than swap in");
                     console.log("Processing jupiter swap");
                     const resultJupiterSwap = await swapJupiter(jupiter, LP.data.resultSimulateJupiter.routesInfos[0]);
@@ -263,12 +282,17 @@ async function main(LP, jupiter) {
                     }
                 }
                 console.log("Processing Invariant swap");
-                const resultInvariantSwap = await swapInvariant(LP, LP.data.yTokenBoughtAmount);
-                if (resultInvariantSwap) {
-                    LP.data.state = 0;
-                    console.log("Invariant swap done", resultInvariantSwap);
-                    await sleep(SETTINGS.pauseAfterTransaction);
+                const resultInvariantSwap = await swapInvariant(LP, LP.data.yTokenBoughtAmount);*/
+                if (resultJupiterSwap.error) {
+                    // For case, this error was false, set state to 1 to revalidate swap
+                    console.log("Jupiter swap error", resultJupiterSwap.error);
+                } else if (resultJupiterSwap.txid) {
+                    console.log("Jupiter swap done");
                 }
+                if (resultInvariantSwap) {
+                    console.log("Invariant swap done", resultInvariantSwap);
+                }
+                await sleep(SETTINGS.pauseAfterTransaction);
             } else {
                 console.log("Swap in is bigger than swap out");
             }
