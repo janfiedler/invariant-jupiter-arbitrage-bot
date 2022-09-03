@@ -201,7 +201,9 @@ async function main(LP, jupiter) {
                     if (resultInvariantSwap) {
                         LP.data.state = 1
                     }
-                    await sleep(SETTINGS.pauseAfterTransaction);
+                    if(!LP.bothAssets) {
+                        await sleep(SETTINGS.pauseAfterTransaction);
+                    }
                 } else if (LP.data.state === 1) {
                     console.log("Continue with Jupiter swap after some error");
                     //Need verification of balance after failed swap
@@ -252,6 +254,8 @@ async function main(LP, jupiter) {
                         LP.data.state = 1;
                         LP.data.yTokenBoughtAmount = resultJupiterSwap.outputAmount;
                         console.log("Jupiter swap done");
+                    }
+                    if(!LP.bothAssets) {
                         await sleep(SETTINGS.pauseAfterTransaction);
                     }
                 } else if (LP.data.state === 1) {
