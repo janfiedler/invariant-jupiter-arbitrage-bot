@@ -193,31 +193,44 @@ async function main(LP, jupiter) {
             //console.log("toOutAmount", toOutAmount);
             console.log("diff", (toOutAmount - LP.data.xTokenInitialAmount));
             if ((toOutAmount > LP.data.xTokenInitialAmount) && ((toOutAmount - LP.data.xTokenInitialAmount) > LP.minUnitProfit)) {
-                if (LP.data.state === 0) {
-                    console.log("Swap out is bigger than swap in");
-                    console.log("Processing Invariant swap");
-                    const resultInvariantSwap = await swapInvariant(LP, LP.data.xTokenInitialAmount);
-                    console.log("Invariant swap done", resultInvariantSwap);
-                    if (resultInvariantSwap) {
-                        LP.data.state = 1
-                    }
-                    if(!LP.bothAssets) {
-                        await sleep(SETTINGS.pauseAfterTransaction);
-                    }
-                } else if (LP.data.state === 1) {
-                    console.log("Continue with Jupiter swap after some error");
-                    //Need verification of balance after failed swap
-                    const resultRequiredBalance = await verifyRequiredBalance(LP);
-                    if (!resultRequiredBalance) {
-                        return;
-                    }
-                }
 
-                console.log("Processing Jupiter swap");
-                const resultJupiterSwap = await swapJupiter(jupiter, LP.data.resultSimulateJupiter.routesInfos[0]);
-                if (resultJupiterSwap.txid) {
-                    LP.data.state = 0;
-                    console.log("Jupiter swap done");
+                console.log("Swap out is bigger than swap in");
+                // Jupiter changing price faster than invariant (low volume), we must do jupiter swap fast as possible.
+                // Invariant provide output amount only from simulate, not finale swap. We can do swap in parallel if we provide both assets
+                if (LP.bothAssets) {
+                    console.log("Processing Invariant and Jupiter swap in parallel");
+                    const [resultInvariantSwap, resultJupiterSwap] = await Promise.all([
+                        swapInvariant(LP, LP.data.xTokenInitialAmount),
+                        swapJupiter(jupiter, LP.data.resultSimulateJupiter.routesInfos[0])
+                    ]);
+                    if (resultInvariantSwap) {
+                        console.log("Invariant swap done", resultInvariantSwap);
+                    }
+                    if (resultJupiterSwap.txid) {
+                        console.log("Jupiter swap done");
+                    }
+                } else {
+                    if (LP.data.state === 0) {
+                        console.log("Processing Invariant swap");
+                        const resultInvariantSwap = await swapInvariant(LP, LP.data.xTokenInitialAmount);
+                        console.log("Invariant swap done", resultInvariantSwap);
+                        if (resultInvariantSwap) {
+                            LP.data.state = 1
+                        }
+                    } else if (LP.data.state === 1) {
+                        console.log("Continue with Jupiter swap after some error");
+                        //Need verification of balance after failed swap
+                        const resultRequiredBalance = await verifyRequiredBalance(LP);
+                        if (!resultRequiredBalance) {
+                            return;
+                        }
+                    }
+                    console.log("Processing Jupiter swap");
+                    const resultJupiterSwap = await swapJupiter(jupiter, LP.data.resultSimulateJupiter.routesInfos[0]);
+                    if (resultJupiterSwap.txid) {
+                        LP.data.state = 0;
+                        console.log("Jupiter swap done");
+                    }
                 }
                 await sleep(SETTINGS.pauseAfterTransaction);
             } else {
@@ -255,7 +268,7 @@ async function main(LP, jupiter) {
                         LP.data.yTokenBoughtAmount = resultJupiterSwap.outputAmount;
                         console.log("Jupiter swap done");
                     }
-                    if(!LP.bothAssets) {
+                    if (!LP.bothAssets) {
                         await sleep(SETTINGS.pauseAfterTransaction);
                     }
                 } else if (LP.data.state === 1) {
