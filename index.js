@@ -16,6 +16,13 @@ let keypair = Keypair.fromSecretKey(secretKey);
 
 let connection = new Connection(RPC_ENDPOINT, {confirmTransactionInitialTimeout: 120000});
 
+// Catch request to exit process, wait until round is finished
+let running = true;
+process.on('SIGINT', () => {
+    console.log("Caught request to exit process, waiting until round is finished");
+    running = false;
+});
+
 const sleep = function (ms) {
     return new Promise(resolve => {
         console.log(`Waiting ${ms / 1000} seconds before continue`);
@@ -296,13 +303,16 @@ async function main(LP, jupiter) {
 }
 
 async function begin(jupiter) {
-    // Loop through all settings
-    for (const LP of LPs) {
-        // Call main function with current setting
-        await main(LP, jupiter);
+    // If running true, do job else return and finish
+    if (running) {
+        // Loop through all settings
+        for (const LP of LPs) {
+            // Call main function with current setting
+            await main(LP, jupiter);
+        }
+        await sleep(SETTINGS.LOOP_TIMEOUT * 1000);
+        begin(jupiter);
     }
-    await sleep(SETTINGS.LOOP_TIMEOUT * 1000);
-    begin(jupiter);
 }
 
 // Create empty async function that start immediately
@@ -313,7 +323,7 @@ async function begin(jupiter) {
         cluster: "mainnet-beta",
         user: keypair, // or public key
         // platformFeeAndAccounts:  NO_PLATFORM_FEE,
-        routeCacheDuration: 10_000, // Will not refetch data on computeRoutes for up to 10 seconds
+        routeCacheDuration: 0, // refetch data on computeRoutes
     });
     begin(jupiter);
 })();
