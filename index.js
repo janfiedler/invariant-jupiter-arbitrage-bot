@@ -18,8 +18,14 @@ let connection = new Connection(RPC_ENDPOINT, {confirmTransactionInitialTimeout:
 
 // Catch request to exit process, wait until round is finished
 let running = true;
+let countSigint = 0;
 process.on('SIGINT', () => {
     console.log("Caught request to exit process, waiting until round is finished");
+    if (countSigint > 0) {
+        console.log("Caught request to exit process again, exiting now");
+        process.exit(1);
+    }
+    countSigint++;
     running = false;
 });
 
