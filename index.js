@@ -209,19 +209,26 @@ async function main(LP, jupiter) {
 
                 console.log("Swap out is bigger than swap in");
                 // Jupiter changing price faster than invariant (low volume), we must do jupiter swap fast as possible.
-                // Invariant provide output amount only from simulate, not finale swap. We can do swap in parallel if we provide both assets
+                // Invariant provide output amount only from simulate, not finale swap.
                 if (LP.bothAssets) {
-                    console.log("Processing Invariant and Jupiter swap in parallel");
-                    const [resultInvariantSwap, resultJupiterSwap] = await Promise.all([
-                        swapInvariant(LP, LP.data.xTokenInitialAmount),
-                        swapJupiter(jupiter, LP.data.resultSimulateJupiter.routesInfos[0])
-                    ]);
-                    if (resultInvariantSwap) {
-                        console.log("Invariant swap done", resultInvariantSwap);
-                    }
+                    console.log("Processing Jupiter swap");
+                    const resultJupiterSwap = await swapJupiter(jupiter, LP.data.resultSimulateJupiter.routesInfos[0]);
                     if (resultJupiterSwap.txid) {
                         console.log("Jupiter swap done");
                     }
+
+                    console.log("Processing Invariant swap");
+                    const resultInvariantSwap = await swapInvariant(LP, LP.data.xTokenInitialAmount);
+                    if (resultInvariantSwap) {
+                        console.log("Invariant swap done", resultInvariantSwap);
+                        LP.tempLoopTimeout = 0;
+                    }
+
+                    /*                    console.log("Processing Invariant and Jupiter swap in parallel");
+                                        const [resultInvariantSwap, resultJupiterSwap] = await Promise.all([
+                                            swapInvariant(LP, LP.data.xTokenInitialAmount),
+                                            swapJupiter(jupiter, LP.data.resultSimulateJupiter.routesInfos[0])
+                                        ]);*/
                 } else {
                     if (LP.data.state === 0) {
                         console.log("Processing Invariant swap");
@@ -247,6 +254,7 @@ async function main(LP, jupiter) {
                 }
                 await sleep(SETTINGS.pauseAfterTransaction);
             } else {
+                LP.tempLoopTimeout = SETTINGS.LOOP_TIMEOUT;
                 console.log("Swap in is bigger than swap out");
             }
         } else {
@@ -296,10 +304,12 @@ async function main(LP, jupiter) {
                 const resultInvariantSwap = await swapInvariant(LP, LP.data.yTokenBoughtAmount);
                 if (resultInvariantSwap) {
                     LP.data.state = 0;
+                    LP.tempLoopTimeout = 0;
                     console.log("Invariant swap done", resultInvariantSwap);
                     await sleep(SETTINGS.pauseAfterTransaction);
                 }
             } else {
+                LP.tempLoopTimeout = SETTINGS.LOOP_TIMEOUT;
                 console.log("Swap in is bigger than swap out");
             }
         }
@@ -311,12 +321,21 @@ async function main(LP, jupiter) {
 async function begin(jupiter) {
     // If running true, do job else return and finish
     if (running) {
+        let tempLoopTimeout = false;
         // Loop through all settings
         for (const LP of LPs) {
             // Call main function with current setting
             await main(LP, jupiter);
+            // If some LP is after swap, do not sleep and try if are conditions for another swap
+            if (LP.tempLoopTimeout === 0) {
+                tempLoopTimeout = true;
+            }
         }
-        await sleep(SETTINGS.LOOP_TIMEOUT * 1000);
+        if (tempLoopTimeout) {
+            await sleep(100);
+        } else {
+            await sleep(SETTINGS.LOOP_TIMEOUT * 1000);
+        }
         begin(jupiter);
     }
 }
