@@ -23,6 +23,8 @@ const dataTemplate = {
     invariant: {
         tokenXAddress: null,
         tokenYAddress: null,
+        accountX: null,
+        accountY: null,
         market: null,
         pair: null,
         poolData: null,

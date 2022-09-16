@@ -95,30 +95,34 @@ async function simulateInvariant(LP, fromInvariant, data, amountIn) {
 }
 
 async function swapInvariant(fromInvariant, data,  amount) {
-    // Get the associated account for the token in wallet.
-    const [accountX, accountY] = await Promise.all([
-        PublicKey.findProgramAddress(
-            [
-                keypair.publicKey.toBuffer(),
-                TOKEN_PROGRAM_ID.toBuffer(),
-                new PublicKey(data.invariant.tokenXAddress).toBuffer(),
-            ],
-            ASSOCIATED_TOKEN_PROGRAM_ID
-        ),
-        PublicKey.findProgramAddress(
-            [
-                keypair.publicKey.toBuffer(),
-                TOKEN_PROGRAM_ID.toBuffer(),
-                new PublicKey(data.invariant.tokenYAddress).toBuffer(),
-            ],
-            ASSOCIATED_TOKEN_PROGRAM_ID
-        )
-    ])
+    // Get the associated account for the token in wallet if not already found
+    if(!data.invariant.accountX || !data.invariant.accountY){
+        const [accountX, accountY] = await Promise.all([
+            PublicKey.findProgramAddress(
+                [
+                    keypair.publicKey.toBuffer(),
+                    TOKEN_PROGRAM_ID.toBuffer(),
+                    new PublicKey(data.invariant.tokenXAddress).toBuffer(),
+                ],
+                ASSOCIATED_TOKEN_PROGRAM_ID
+            ),
+            PublicKey.findProgramAddress(
+                [
+                    keypair.publicKey.toBuffer(),
+                    TOKEN_PROGRAM_ID.toBuffer(),
+                    new PublicKey(data.invariant.tokenYAddress).toBuffer(),
+                ],
+                ASSOCIATED_TOKEN_PROGRAM_ID
+            )
+        ]);
+        data.invariant.accountX = accountX[0];
+        data.invariant.accountY = accountY[0];
+    }
 
     const swapVars = {
         xToY: fromInvariant,
-        accountX: accountX[0],
-        accountY: accountY[0],
+        accountX: data.invariant.accountX,
+        accountY: data.invariant.accountY,
         amount: new anchor.BN(amount),
         byAmountIn: true,
         estimatedPriceAfterSwap: {v: data.resultSimulateInvariant.priceAfterSwap},
