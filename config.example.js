@@ -11,6 +11,16 @@ const LPs = [
         invariantFee: INVARIANT_FEE_TIERS[2],
         dataInvJup: {...dataTemplate},
         dataJupInv: {...dataTemplate}
+    },
+    {
+        bothAssets: false,
+        tokenX: TOKEN.USDC,
+        tokenY: TOKEN.USDH,
+        tokenAmount: 1,
+        minUnitProfit: 400,
+        invariantFee: INVARIANT_FEE_TIERS[0],
+        dataInvJup: {...dataTemplate},
+        dataJupInv: {...dataTemplate}
     }
 ];
 
