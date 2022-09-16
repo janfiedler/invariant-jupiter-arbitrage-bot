@@ -72,6 +72,11 @@ async function simulateInvariant(LP, amountIn) {
     data.invariant.tokenYAddress = tokenY.address;
     data.invariant.market = await Market.build(Network.MAIN, keypair, connection);
     data.invariant.pair = new Pair(new PublicKey(data.invariant.tokenXAddress), new PublicKey(data.invariant.tokenYAddress), invariantFee);
+    data.invariant.ticks = new Map(
+        (await data.invariant.market.getAllTicks(data.invariant.pair)).map(tick => {
+            return [tick.index, tick]
+        })
+    )
     data.invariant.poolData = await data.invariant.market.getPool(data.invariant.pair);
 
     const result = await simulateSwap({
@@ -80,6 +85,7 @@ async function simulateInvariant(LP, amountIn) {
         swapAmount: new anchor.BN(amountIn),
         priceLimit: data.invariant.poolData.sqrtPrice,
         slippage: data.invariant.slippage,
+        ticks: data.invariant.ticks,
         tickmap: await data.invariant.market.getTickmap(data.invariant.pair),
         pool: data.invariant.poolData
     });
