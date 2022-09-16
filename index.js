@@ -217,26 +217,20 @@ async function main(LP, fromInvariant, jupiter) {
 
                 console.log("Swap out is bigger than swap in");
                 // Jupiter changing price faster than invariant (low volume), we must do jupiter swap fast as possible.
-                // Invariant provide output amount only from simulate, not finale swap.
                 if (LP.bothAssets) {
-                    console.log("Processing Jupiter swap");
-                    const resultJupiterSwap = await swapJupiter(jupiter, LP.dataInvJup.resultSimulateJupiter.routesInfos[0]);
+                    //Invariant provide output amount only from simulate, not finale swap. We don't know much final amount is, so if we have both assets in wallet, we can do parallel swap.
+                    console.log("Processing Invariant and Jupiter swap in parallel");
+                    const [resultInvariantSwap, resultJupiterSwap] = await Promise.all([
+                        swapInvariant(fromInvariant, LP.dataInvJup, LP.dataInvJup.xTokenInitialAmount),
+                        swapJupiter(jupiter, LP.dataInvJup.resultSimulateJupiter.routesInfos[0])
+                    ]);
+                    if (resultInvariantSwap) {
+                        console.log("Invariant swap done", resultInvariantSwap);
+                    }
                     if (resultJupiterSwap.txid) {
                         console.log("Jupiter swap done");
                     }
-
-                    console.log("Processing Invariant swap");
-                    const resultInvariantSwap = await swapInvariant(fromInvariant, LP.dataInvJup, LP.dataInvJup.xTokenInitialAmount);
-                    if (resultInvariantSwap) {
-                        console.log("Invariant swap done", resultInvariantSwap);
-                        LP.tempLoopTimeout = 0;
-                    }
-
-                    /*                    console.log("Processing Invariant and Jupiter swap in parallel");
-                                        const [resultInvariantSwap, resultJupiterSwap] = await Promise.all([
-                                            swapInvariant(fromInvariant, LP.dataInvJup, LP.dataInvJup.xTokenInitialAmount),
-                                            swapJupiter(jupiter, LP.dataInvJup.resultSimulateJupiter.routesInfos[0])
-                                        ]);*/
+                    LP.tempLoopTimeout = 0;
                 } else {
                     if (LP.dataInvJup.state === 0) {
                         console.log("Processing Invariant swap");
