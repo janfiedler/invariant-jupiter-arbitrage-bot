@@ -1,4 +1,4 @@
-const {fromFee,toPercent} = require("@invariant-labs/sdk/lib/utils");
+const {fromFee,toPercent, FEE_TIERS} = require("@invariant-labs/sdk/lib/utils");
 const anchor = require("@project-serum/anchor");
 
 const TOKEN = {
@@ -10,6 +10,7 @@ const TOKEN = {
 }
 
 const INVARIANT_FEE_TIERS = [
+    {fee: fromFee(new anchor.BN(1))},
     {fee: fromFee(new anchor.BN(10))},
     {fee: fromFee(new anchor.BN(50))},
     {fee: fromFee(new anchor.BN(100))},
