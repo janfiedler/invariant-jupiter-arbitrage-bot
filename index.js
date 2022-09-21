@@ -249,7 +249,9 @@ async function main(LP, fromInvariant, jupiter) {
                     }
                     console.log("Processing Jupiter swap");
                     const resultJupiterSwap = await swapJupiter(jupiter, LP.dataInvJup.resultSimulateJupiter.routesInfos[0]);
-                    if (resultJupiterSwap.txid) {
+                    if (resultJupiterSwap.error) {
+                        return;
+                    } else if (resultJupiterSwap.txid) {
                         LP.dataInvJup.state = 0;
                         console.log("Jupiter swap done");
                         LP.tempLoopTimeout = 0;
@@ -283,8 +285,6 @@ async function main(LP, fromInvariant, jupiter) {
                     console.log("Processing jupiter swap");
                     const resultJupiterSwap = await swapJupiter(jupiter, LP.dataJupInv.resultSimulateJupiter.routesInfos[0]);
                     if (resultJupiterSwap.error) {
-                        // For case, this error was false, set state to 1 to revalidate swap
-                        LP.dataJupInv.state = 1;
                         return;
                     } else if (resultJupiterSwap.txid) {
                         LP.dataJupInv.state = 1;
