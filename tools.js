@@ -37,7 +37,6 @@ const dataTemplate = {
     resultSimulateInvariant: null,
     resultSimulateJupiter: null,
     yTokenBoughtAmount: 0,
-    tempLoopTimeout: 0,
     errorCounter: 0,
 }
 
