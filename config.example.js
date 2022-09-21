@@ -4,6 +4,7 @@ const { TOKEN, INVARIANT_FEE_TIERS, dataTemplate } = require('./tools.js');
 const LPs = [
     {
         bothAssets: true, // If you have funded your wallet with both assets, bot can skip waiting for node sync after first swap
+        fromInvariant: true, // If you want to start swap from the invariant to jupiter first
         tokenX: TOKEN.USDC,
         tokenY: TOKEN.MSOL,
         tokenAmount: 0.2,

@@ -331,12 +331,19 @@ async function begin(jupiter) {
             // fromInvariant:
             // TRUE = buy on invariant and sell on jupiter
             // FALSE = buy on jupiter and sell on invariant
-            await main(LP, true, jupiter);
-            await main(LP, false, jupiter);
-            // If some LP is after swap, do not sleep and try if are conditions for another loop with swap
-            if (LP.tempLoopTimeout === 0) {
-                tempLoopTimeout = true;
+
+            //First try trade same way as last cycle (don't waste time with opposite trade)
+            if(LP.fromInvariant) {
+                await main(LP, true, jupiter);
+                LP.fromInvariant = LP.tempLoopTimeout === 0;
             }
+            //If swap fromInvariant toJupiter not executed, try fromJupiter toInvariant
+            if(!LP.fromInvariant) {
+                await main(LP, false, jupiter);
+                LP.fromInvariant = LP.tempLoopTimeout !== 0;
+            }
+            // If some LP is after swap, do not sleep and try if are conditions for another loop with swap
+            tempLoopTimeout = LP.tempLoopTimeout === 0;
         }
         if (tempLoopTimeout) {
             await sleep(100);
