@@ -216,48 +216,31 @@ async function main(LP, fromInvariant, jupiter) {
             if ((toOutAmount > LP.dataInvJup.xTokenInitialAmount) && ((toOutAmount - LP.dataInvJup.xTokenInitialAmount) > LP.minUnitProfit)) {
 
                 console.log("Swap out is bigger than swap in");
-                // Jupiter changing price faster than invariant (low volume), we must do jupiter swap fast as possible.
-                if (LP.bothAssets) {
-                    //Invariant provide output amount only from simulate, not finale swap. We don't know much final amount is, so if we have both assets in wallet, we can do parallel swap.
-                    console.log("Processing Invariant and Jupiter swap in parallel");
-                    const [resultInvariantSwap, resultJupiterSwap] = await Promise.all([
-                        swapInvariant(fromInvariant, LP.dataInvJup, LP.dataInvJup.xTokenInitialAmount),
-                        swapJupiter(jupiter, LP.dataInvJup.resultSimulateJupiter.routesInfos[0])
-                    ]);
+                if (LP.dataInvJup.state === 0) {
+                    console.log("Processing Invariant swap");
+                    const resultInvariantSwap = await swapInvariant(fromInvariant, LP.dataInvJup, LP.dataInvJup.xTokenInitialAmount);
+                    console.log("Invariant swap done", resultInvariantSwap);
                     if (resultInvariantSwap) {
-                        console.log("Invariant swap done", resultInvariantSwap);
+                        LP.dataInvJup.state = 1
                     }
-                    if (resultJupiterSwap.txid) {
-                        console.log("Jupiter swap done");
-                    }
-                    LP.tempLoopTimeout = 0;
-                } else {
-                    if (LP.dataInvJup.state === 0) {
-                        console.log("Processing Invariant swap");
-                        const resultInvariantSwap = await swapInvariant(fromInvariant, LP.dataInvJup, LP.dataInvJup.xTokenInitialAmount);
-                        console.log("Invariant swap done", resultInvariantSwap);
-                        if (resultInvariantSwap) {
-                            LP.dataInvJup.state = 1
-                        }
-                    } else if (LP.dataInvJup.state === 1) {
-                        console.log("Continue with Jupiter swap after some error");
-                        //Need verification of balance after failed swap
-                        const resultRequiredBalance = await verifyRequiredBalance(LP, LP.dataInvJup);
-                        if (!resultRequiredBalance) {
-                            return;
-                        }
-                    }
-                    console.log("Processing Jupiter swap");
-                    const resultJupiterSwap = await swapJupiter(jupiter, LP.dataInvJup.resultSimulateJupiter.routesInfos[0]);
-                    if (resultJupiterSwap.error) {
+                } else if (LP.dataInvJup.state === 1 && !LP.bothAssets) {
+                    console.log("Continue with Jupiter swap after some error");
+                    //Need verification of balance after failed swap
+                    const resultRequiredBalance = await verifyRequiredBalance(LP, LP.dataInvJup);
+                    if (!resultRequiredBalance) {
                         return;
-                    } else if (resultJupiterSwap.txid) {
-                        LP.dataInvJup.state = 0;
-                        console.log("Jupiter swap done");
-                        LP.tempLoopTimeout = 0;
                     }
                 }
-                await sleep(SETTINGS.pauseAfterTransaction);
+                console.log("Processing Jupiter swap");
+                const resultJupiterSwap = await swapJupiter(jupiter, LP.dataInvJup.resultSimulateJupiter.routesInfos[0]);
+                if (resultJupiterSwap.error) {
+                    return;
+                } else if (resultJupiterSwap.txid) {
+                    LP.dataInvJup.state = 0;
+                    console.log("Jupiter swap done");
+                    LP.tempLoopTimeout = 0;
+                    await shouldWait(LP);
+                }
             } else {
                 console.log("Swap in is bigger than swap out");
             }
@@ -290,11 +273,10 @@ async function main(LP, fromInvariant, jupiter) {
                         LP.dataJupInv.state = 1;
                         LP.dataJupInv.yTokenBoughtAmount = resultJupiterSwap.outputAmount;
                         console.log("Jupiter swap done");
+                        await shouldWait(LP);
                     }
-                    if (!LP.bothAssets) {
-                        await sleep(SETTINGS.pauseAfterTransaction);
-                    }
-                } else if (LP.dataJupInv.state === 1) {
+
+                } else if (LP.dataJupInv.state === 1 && !LP.bothAssets) {
                     console.log("Continue with Invariant swap after some error");
                     //Need verification of balance after failed swap
                     const resultRequiredBalance = await verifyRequiredBalance(LP, LP.dataJupInv);
@@ -308,7 +290,7 @@ async function main(LP, fromInvariant, jupiter) {
                     LP.dataJupInv.state = 0;
                     LP.tempLoopTimeout = 0;
                     console.log("Invariant swap done", resultInvariantSwap);
-                    await sleep(SETTINGS.pauseAfterTransaction);
+                    await shouldWait(LP);
                 }
             } else {
                 console.log("Swap in is bigger than swap out");
@@ -316,6 +298,13 @@ async function main(LP, fromInvariant, jupiter) {
         }
     } catch (error) {
         console.log(error);
+    }
+}
+
+// if LP.bothAssets is true skip sleep function, we don't need to wait on sync node
+async function shouldWait(LP) {
+    if (!LP.bothAssets) {
+        await sleep(SETTINGS.pauseAfterTransaction * 1000);
     }
 }
 

@@ -26,8 +26,8 @@ const LPs = [
 ];
 
 const SETTINGS = {
-    pauseAfterTransaction: 0, // In miliseconds to wait after nodes sync
-    LOOP_TIMEOUT: 30,
+    pauseAfterTransaction: 2, // In seconds to wait after nodes sync
+    LOOP_TIMEOUT: 30, // In seconds
     JUPITER: {
         onlyDirectRoutes: true, // It ensures only direct routing and also disable split trade trading
     }
