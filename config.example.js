@@ -10,8 +10,8 @@ const LPs = [
         tokenAmount: 0.2,
         minUnitProfit: 400,
         invariantFee: INVARIANT_FEE_TIERS[2],
-        dataInvJup: {...dataTemplate},
-        dataJupInv: {...dataTemplate},
+        dataInvJup: JSON.parse(JSON.stringify(dataTemplate)),
+        dataJupInv: JSON.parse(JSON.stringify(dataTemplate)),
         JUPITER: {
             onlyDirectRoutes: true, // It ensures only direct routing and also disable split trade trading
         }
@@ -23,8 +23,8 @@ const LPs = [
         tokenAmount: 1,
         minUnitProfit: 400,
         invariantFee: INVARIANT_FEE_TIERS[0],
-        dataInvJup: {...dataTemplate},
-        dataJupInv: {...dataTemplate},
+        dataInvJup: JSON.parse(JSON.stringify(dataTemplate)),
+        dataJupInv: JSON.parse(JSON.stringify(dataTemplate)),
         JUPITER: {
             onlyDirectRoutes: true, // It ensures only direct routing and also disable split trade trading
         }

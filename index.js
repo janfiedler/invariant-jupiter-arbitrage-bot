@@ -3,7 +3,7 @@ const anchor = require("@project-serum/anchor");
 const {TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID} = require("@solana/spl-token");
 const {Market, Pair, Network} = require('@invariant-labs/sdk')
 const {Keypair, PublicKey, Connection} = require('@solana/web3.js');
-const {fromFee, simulateSwap} = require('@invariant-labs/sdk/lib/utils')
+const {fromFee, simulateSwap, toPercent} = require('@invariant-labs/sdk/lib/utils')
 const {Jupiter} = require("@jup-ag/core");
 const JSBI = require('jsbi');
 
@@ -85,7 +85,7 @@ async function simulateInvariant(LP, fromInvariant, data, amountIn) {
         byAmountIn: true,
         swapAmount: new anchor.BN(amountIn),
         priceLimit: data.invariant.poolData.sqrtPrice,
-        slippage: data.invariant.slippage,
+        slippage: toPercent(data.invariant.slippage, 1),
         ticks: data.invariant.ticks,
         tickmap: await data.invariant.market.getTickmap(data.invariant.pair),
         pool: data.invariant.poolData
@@ -97,7 +97,7 @@ async function simulateInvariant(LP, fromInvariant, data, amountIn) {
 
 async function swapInvariant(fromInvariant, data, amount) {
     // Get the associated account for the token in wallet if not already found
-    if (!data.invariant.accountX || !data.invariant.accountY) {
+    if (data.invariant.accountX === null || data.invariant.accountY === null) {
         const [accountX, accountY] = await Promise.all([
             PublicKey.findProgramAddress(
                 [
@@ -127,7 +127,7 @@ async function swapInvariant(fromInvariant, data, amount) {
         amount: new anchor.BN(amount),
         byAmountIn: true,
         estimatedPriceAfterSwap: {v: data.resultSimulateInvariant.priceAfterSwap},
-        slippage: data.invariant.slippage,
+        slippage: toPercent(data.invariant.slippage, 1),
         pair: data.invariant.pair,
         owner: keypair.publicKey,
     }
@@ -333,7 +333,7 @@ async function begin(jupiter) {
                 LP.fromInvariant = LP.tempLoopTimeout !== 0;
             }
             // If skipLoopTimeout is false, check if LP swap completed. Then do not sleep and do new loop timidity
-            if(!skipLoopTimeout) {
+            if (!skipLoopTimeout) {
                 skipLoopTimeout = LP.tempLoopTimeout === 0;
             }
         }

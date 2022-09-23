@@ -1,4 +1,4 @@
-const {fromFee,toPercent, FEE_TIERS} = require("@invariant-labs/sdk/lib/utils");
+const {fromFee} = require("@invariant-labs/sdk/lib/utils");
 const anchor = require("@project-serum/anchor");
 
 const TOKEN = {
@@ -28,7 +28,7 @@ const dataTemplate = {
         market: null,
         pair: null,
         poolData: null,
-        slippage: toPercent(5, 1)
+        slippage: 5
     },
     jupiter: {
         slippage: 5
