@@ -94,9 +94,9 @@ async function simulateInvariant(LP, fromInvariant, data, amountIn) {
     return result;
 }
 
-async function swapInvariant(fromInvariant, data,  amount) {
+async function swapInvariant(fromInvariant, data, amount) {
     // Get the associated account for the token in wallet if not already found
-    if(!data.invariant.accountX || !data.invariant.accountY){
+    if (!data.invariant.accountX || !data.invariant.accountY) {
         const [accountX, accountY] = await Promise.all([
             PublicKey.findProgramAddress(
                 [
@@ -311,7 +311,7 @@ async function shouldWait(LP) {
 async function begin(jupiter) {
     // If running true, do job else return and finish
     if (running) {
-        let tempLoopTimeout = false;
+        let skipLoopTimeout = false;
         // Loop through all settings
         for (const LP of LPs) {
             // Set default loop timeout for current LP
@@ -322,21 +322,19 @@ async function begin(jupiter) {
             // FALSE = buy on jupiter and sell on invariant
 
             //First try trade same way as last cycle (don't waste time with opposite trade)
-            if(LP.fromInvariant) {
+            if (LP.fromInvariant) {
                 await main(LP, true, jupiter);
                 LP.fromInvariant = LP.tempLoopTimeout === 0;
             }
             //If swap fromInvariant toJupiter not executed, try fromJupiter toInvariant
-            if(!LP.fromInvariant) {
+            if (!LP.fromInvariant) {
                 await main(LP, false, jupiter);
                 LP.fromInvariant = LP.tempLoopTimeout !== 0;
             }
-            // If some LP is after swap, do not sleep and try if are conditions for another loop with swap
-            tempLoopTimeout = LP.tempLoopTimeout === 0;
+            // If tempLoopTimeout is false, then after is LP swap, do not sleep and try if are conditions for another loop with swap
+            skipLoopTimeout = LP.tempLoopTimeout === true ? true : LP.tempLoopTimeout === 0;
         }
-        if (tempLoopTimeout) {
-            await sleep(100);
-        } else {
+        if (!skipLoopTimeout) {
             await sleep(SETTINGS.LOOP_TIMEOUT * 1000);
         }
         begin(jupiter);
