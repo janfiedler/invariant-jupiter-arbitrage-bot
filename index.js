@@ -331,8 +331,10 @@ async function begin(jupiter) {
                 await main(LP, false, jupiter);
                 LP.fromInvariant = LP.tempLoopTimeout !== 0;
             }
-            // If tempLoopTimeout is false, then after is LP swap, do not sleep and try if are conditions for another loop with swap
-            skipLoopTimeout = LP.tempLoopTimeout === true ? true : LP.tempLoopTimeout === 0;
+            // If skipLoopTimeout is false, check if LP swap completed. Then do not sleep and do new loop timidity
+            if(!skipLoopTimeout) {
+                skipLoopTimeout = LP.tempLoopTimeout === 0;
+            }
         }
         if (!skipLoopTimeout) {
             await sleep(SETTINGS.LOOP_TIMEOUT * 1000);
