@@ -70,8 +70,9 @@ async function simulateInvariant(LP, fromInvariant, data, amountIn) {
     const {tokenX, tokenY, invariantFee} = LP;
     data.invariant.tokenXAddress = tokenX.address;
     data.invariant.tokenYAddress = tokenY.address;
-    data.invariant.market = await Market.build(Network.MAIN, keypair, connection);
-    data.invariant.pair = new Pair(new PublicKey(data.invariant.tokenXAddress), new PublicKey(data.invariant.tokenYAddress), invariantFee);
+    data.invariant.market = data.invariant.market === null ? await Market.build(Network.MAIN, keypair, connection) : data.invariant.market;
+    data.invariant.pair = data.invariant.pair === null ? new Pair(new PublicKey(data.invariant.tokenXAddress), new PublicKey(data.invariant.tokenYAddress), invariantFee) : data.invariant.pair;
+
     data.invariant.ticks = new Map(
         (await data.invariant.market.getAllTicks(data.invariant.pair)).map(tick => {
             return [tick.index, tick]
