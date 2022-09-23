@@ -135,14 +135,14 @@ async function swapInvariant(fromInvariant, data,  amount) {
     return await data.invariant.market.swap(swapVars, keypair);
 }
 
-async function simulateJupiter(jupiter, data, from, to, amount) {
+async function simulateJupiter(jupiter, onlyDirectRoutes, data, from, to, amount) {
     const routes = await jupiter.computeRoutes({
         inputMint: new PublicKey(from.address), // Mint address of the input token
         outputMint: new PublicKey(to.address), // Mint address of the output token
         amount, // raw input amount of tokens
         slippage: data.jupiter.slippage, // The slippage in % terms
         forceFetch: true, // false is the default value => will use cache if not older than routeCacheDuration
-        onlyDirectRoutes: SETTINGS.JUPITER.onlyDirectRoutes ?? false, // It ensures only direct routing and also disable split trade trading
+        onlyDirectRoutes, // It ensures only direct routing and also disable split trade trading
         intermediateTokens: true, // intermediateTokens, if provided will only find routes that use the intermediate tokens
     });
     return routes;
@@ -205,7 +205,7 @@ async function main(LP, fromInvariant, jupiter) {
                 console.log(`Invarinat => ${LP.dataInvJup.resultSimulateInvariant.accumulatedAmountIn.add(LP.dataInvJup.resultSimulateInvariant.accumulatedFee).toString()} ${LP.tokenX.symbol} => ${LP.dataInvJup.resultSimulateInvariant.accumulatedAmountOut.toString()} ${LP.tokenY.symbol}`)
                 LP.dataInvJup.yTokenBoughtAmount = LP.dataInvJup.resultSimulateInvariant.accumulatedAmountOut;
 
-                LP.dataInvJup.resultSimulateJupiter = await simulateJupiter(jupiter, LP.dataInvJup, LP.tokenY, LP.tokenX, JSBI.BigInt(LP.dataInvJup.yTokenBoughtAmount));
+                LP.dataInvJup.resultSimulateJupiter = await simulateJupiter(jupiter, LP.JUPITER.onlyDirectRoutes, LP.dataInvJup, LP.tokenY, LP.tokenX, JSBI.BigInt(LP.dataInvJup.yTokenBoughtAmount));
                 console.log(`Jupiter => ${JSBI.toNumber(LP.dataInvJup.resultSimulateJupiter.routesInfos[0].inAmount)} ${LP.tokenY.symbol} => ${JSBI.toNumber(LP.dataInvJup.resultSimulateJupiter.routesInfos[0].outAmount)} ${LP.tokenX.symbol}`)
             }
 
@@ -250,7 +250,7 @@ async function main(LP, fromInvariant, jupiter) {
                     LP.tokenAmount,
                     LP.tokenX.decimals
                 );
-                LP.dataJupInv.resultSimulateJupiter = await simulateJupiter(jupiter, LP.dataJupInv, LP.tokenX, LP.tokenY, JSBI.BigInt(LP.dataJupInv.xTokenInitialAmount));
+                LP.dataJupInv.resultSimulateJupiter = await simulateJupiter(jupiter, LP.JUPITER.onlyDirectRoutes, LP.dataJupInv, LP.tokenX, LP.tokenY, JSBI.BigInt(LP.dataJupInv.xTokenInitialAmount));
                 console.log(`Jupiter => ${JSBI.toNumber(LP.dataJupInv.resultSimulateJupiter.routesInfos[0].inAmount)} ${LP.tokenX.symbol} => ${JSBI.toNumber(LP.dataJupInv.resultSimulateJupiter.routesInfos[0].outAmount)} ${LP.tokenY.symbol}`)
                 LP.dataJupInv.yTokenBoughtAmount = JSBI.toNumber(LP.dataJupInv.resultSimulateJupiter.routesInfos[0].outAmount);
 

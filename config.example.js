@@ -1,4 +1,4 @@
-const { TOKEN, INVARIANT_FEE_TIERS, dataTemplate } = require('./tools.js');
+const {TOKEN, INVARIANT_FEE_TIERS, dataTemplate} = require('./tools.js');
 
 // Settings for LP's
 const LPs = [
@@ -11,7 +11,10 @@ const LPs = [
         minUnitProfit: 400,
         invariantFee: INVARIANT_FEE_TIERS[2],
         dataInvJup: {...dataTemplate},
-        dataJupInv: {...dataTemplate}
+        dataJupInv: {...dataTemplate},
+        JUPITER: {
+            onlyDirectRoutes: true, // It ensures only direct routing and also disable split trade trading
+        }
     },
     {
         bothAssets: false,
@@ -21,16 +24,16 @@ const LPs = [
         minUnitProfit: 400,
         invariantFee: INVARIANT_FEE_TIERS[0],
         dataInvJup: {...dataTemplate},
-        dataJupInv: {...dataTemplate}
+        dataJupInv: {...dataTemplate},
+        JUPITER: {
+            onlyDirectRoutes: true, // It ensures only direct routing and also disable split trade trading
+        }
     }
 ];
 
 const SETTINGS = {
     pauseAfterTransaction: 2, // In seconds to wait after nodes sync
-    LOOP_TIMEOUT: 30, // In seconds
-    JUPITER: {
-        onlyDirectRoutes: true, // It ensures only direct routing and also disable split trade trading
-    }
+    LOOP_TIMEOUT: 30 // In seconds
 }
 
 module.exports = {
