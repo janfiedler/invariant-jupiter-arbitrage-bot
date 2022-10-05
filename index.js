@@ -141,7 +141,7 @@ async function simulateJupiter(jupiter, onlyDirectRoutes, data, from, to, amount
         inputMint: new PublicKey(from.address), // Mint address of the input token
         outputMint: new PublicKey(to.address), // Mint address of the output token
         amount, // raw input amount of tokens
-        slippage: data.jupiter.slippage, // The slippage in % terms
+        slippageBps: Math.ceil(data.jupiter.slippage*100), // The slippage in % terms
         forceFetch: true, // false is the default value => will use cache if not older than routeCacheDuration
         onlyDirectRoutes, // It ensures only direct routing and also disable split trade trading
         intermediateTokens: true, // intermediateTokens, if provided will only find routes that use the intermediate tokens
