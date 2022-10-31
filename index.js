@@ -84,14 +84,12 @@ async function simulateInvariant(LP, fromInvariant, data, amountIn) {
         xToY: fromInvariant,
         byAmountIn: true,
         swapAmount: new anchor.BN(amountIn),
-        priceLimit: data.invariant.poolData.sqrtPrice,
         slippage: toPercent(data.invariant.slippage, 1),
         ticks: data.invariant.ticks,
         tickmap: await data.invariant.market.getTickmap(data.invariant.pair),
         pool: data.invariant.poolData
     });
 
-    //console.log(data.invariant.poolData.liquidity.v.toString())
     return result;
 }
 
@@ -353,6 +351,7 @@ async function begin(jupiter) {
         user: keypair, // or public key
         // platformFeeAndAccounts:  NO_PLATFORM_FEE,
         routeCacheDuration: 0, // refetch data on computeRoutes
+        wrapUnwrapSOL: false
     });
     begin(jupiter);
 })();

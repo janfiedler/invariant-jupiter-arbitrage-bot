@@ -132,20 +132,20 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@invariant-labs/sdk@npm:^0.9.31":
-  version: 0.9.31
-  resolution: "@invariant-labs/sdk@npm:0.9.31"
+"@invariant-labs/sdk@npm:^0.9.32":
+  version: 0.9.32
+  resolution: "@invariant-labs/sdk@npm:0.9.32"
   dependencies:
     "@project-serum/anchor": 0.21.0
     "@solana/spl-token-registry": ^0.2.4484
     chai: ^4.3.0
-  checksum: b4777e47bb80a14322594dbf4735e952b86f4ca3d3b0765f5dc0683e0febe044268780cd0e0dd39104c89504e6dfe42f74be25e0fa0fd30348440c452bee72a1
+  checksum: 282827e0c7eb431f3b1187a7f94870abeb5aa6a4a7df31138c7bed101251e7ee704663e7b1685907a4df2ced4f346d02dfe4a185046e1f69f418954e4e6364fb
   languageName: node
   linkType: hard
 
-"@jup-ag/core@npm:^3.0.0-beta.0":
-  version: 3.0.0-beta.0
-  resolution: "@jup-ag/core@npm:3.0.0-beta.0"
+"@jup-ag/core@npm:^3.0.0-beta.2":
+  version: 3.0.0-beta.1-test.3
+  resolution: "@jup-ag/core@npm:3.0.0-beta.1-test.3"
   dependencies:
     "@jup-ag/crema-sdk": 2.0.7
     "@jup-ag/cykura-sdk": 0.1.25
@@ -154,7 +154,7 @@ __metadata:
     "@jup-ag/goosefx-ssl-sdk": 1.2.13
     "@jup-ag/invariant": 0.9.35
     "@jup-ag/lifinity-sdk": 0.1.72
-    "@jup-ag/math": 3.0.0-beta.0
+    "@jup-ag/math": 3.0.0-beta.1-test.3
     "@jup-ag/whirlpool-sdk": 0.1.1
     "@mercurial-finance/dynamic-amm-sdk": 0.1.4
     "@mercurial-finance/optimist": 0.1.8
@@ -175,7 +175,7 @@ __metadata:
   peerDependencies:
     "@solana/buffer-layout": ^3 || ^4
     "@solana/web3.js": ">=1.42.0"
-  checksum: 4f4bd82a1e704d5e3464816e636983039fad9386320b28bb96c85ace1fdcb324ae3aaf6a79482bfbd22391bff9c011ac19ce1b79a092ea6fad4d0691aa95b871
+  checksum: cfb2796a9f5d7f3a25daa5e535a7fe1cc00661681004aa56e01a4360610c97d4d19582725e77235d8d6e4d47d9197ffbd572257218e59eb1b9a4d44277715533
   languageName: node
   linkType: hard
 
@@ -264,13 +264,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@jup-ag/math@npm:3.0.0-beta.0":
-  version: 3.0.0-beta.0
-  resolution: "@jup-ag/math@npm:3.0.0-beta.0"
+"@jup-ag/math@npm:3.0.0-beta.1-test.3":
+  version: 3.0.0-beta.1-test.3
+  resolution: "@jup-ag/math@npm:3.0.0-beta.1-test.3"
   dependencies:
     decimal.js: 10.3.1
     jsbi: 4.3.0
-  checksum: a5876eeb13da81444128dd5229d2fd9e8529c1f1946a34c064d45fb5614fba0827cab82970d52b0552f176f84762013fe55877a712bcce886460571a01cfca4c
+  checksum: d3910bb415da5f83fc08feb5b857f06cca4e5c115cb2ca89f60dad10d0da751b8ad58b1a937f883179973d7f8294aedabde1139f9174307349607a591e16c7fe
   languageName: node
   linkType: hard
 
@@ -1083,16 +1083,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@solana/spl-token@npm:^0.3.5":
-  version: 0.3.5
-  resolution: "@solana/spl-token@npm:0.3.5"
+"@solana/spl-token@npm:^0.3.6":
+  version: 0.3.6
+  resolution: "@solana/spl-token@npm:0.3.6"
   dependencies:
     "@solana/buffer-layout": ^4.0.0
     "@solana/buffer-layout-utils": ^0.2.0
     buffer: ^6.0.3
   peerDependencies:
     "@solana/web3.js": ^1.47.4
-  checksum: 230c153b886c7dedb09fdd65c4fd71259d37f3c951ab6ea9c099aff875cc595fc9d44c74b4d7ffef59475f7edd7a8a00931bfec8ab2bd3141512ca3f6f828139
+  checksum: e213db12ff6e443d07033898457854c5659189a00fc58f7cfd1b27229fdafd26edb7f1dcdcd21f76e703a8932b465cd6f418268c04f1b00996802f9894c280e7
   languageName: node
   linkType: hard
 
@@ -1152,7 +1152,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@solana/web3.js@npm:^1.28.0, @solana/web3.js@npm:^1.29.0, @solana/web3.js@npm:^1.31.0, @solana/web3.js@npm:^1.37.0, @solana/web3.js@npm:^1.41.1, @solana/web3.js@npm:^1.42.0, @solana/web3.js@npm:^1.43.5, @solana/web3.js@npm:^1.59.0, @solana/web3.js@npm:^1.63.1":
+"@solana/web3.js@npm:^1.28.0, @solana/web3.js@npm:^1.29.0, @solana/web3.js@npm:^1.31.0, @solana/web3.js@npm:^1.37.0, @solana/web3.js@npm:^1.41.1, @solana/web3.js@npm:^1.42.0, @solana/web3.js@npm:^1.43.5, @solana/web3.js@npm:^1.59.0":
   version: 1.63.1
   resolution: "@solana/web3.js@npm:1.63.1"
   dependencies:
@@ -1172,6 +1172,29 @@ __metadata:
     rpc-websockets: ^7.5.0
     superstruct: ^0.14.2
   checksum: 77a79cc4b7f9b081aa8df1d01450015f594d11557b515b19f06c875bd1f489e421065c51eb0c756207dca5f61494c67bbcf81209b2bd3e292d239e7701e5a90e
+  languageName: node
+  linkType: hard
+
+"@solana/web3.js@npm:^1.66.2":
+  version: 1.66.2
+  resolution: "@solana/web3.js@npm:1.66.2"
+  dependencies:
+    "@babel/runtime": ^7.12.5
+    "@noble/ed25519": ^1.7.0
+    "@noble/hashes": ^1.1.2
+    "@noble/secp256k1": ^1.6.3
+    "@solana/buffer-layout": ^4.0.0
+    bigint-buffer: ^1.1.5
+    bn.js: ^5.0.0
+    borsh: ^0.7.0
+    bs58: ^4.0.1
+    buffer: 6.0.1
+    fast-stable-stringify: ^1.0.0
+    jayson: ^3.4.4
+    node-fetch: 2
+    rpc-websockets: ^7.5.0
+    superstruct: ^0.14.2
+  checksum: e2f293bfa43bb5703c1489f005a2d5843249ccf62001dbce143ffc8b0a662c56630f601a4249bbc40b029e3bc0ab7b4011fabda902322cb3545b02bf2626150a
   languageName: node
   linkType: hard
 
@@ -2380,11 +2403,11 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "invariant-jup-arbit-bot@workspace:."
   dependencies:
-    "@invariant-labs/sdk": ^0.9.31
-    "@jup-ag/core": ^3.0.0-beta.0
+    "@invariant-labs/sdk": ^0.9.32
+    "@jup-ag/core": ^3.0.0-beta.2
     "@project-serum/anchor": ^0.25.0
-    "@solana/spl-token": ^0.3.5
-    "@solana/web3.js": ^1.63.1
+    "@solana/spl-token": ^0.3.6
+    "@solana/web3.js": ^1.66.2
     dotenv: ^16.0.3
     jsbi: ^4.3.0
   languageName: unknown

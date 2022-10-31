@@ -2,6 +2,7 @@ const {fromFee} = require("@invariant-labs/sdk/lib/utils");
 const anchor = require("@project-serum/anchor");
 
 const TOKEN = {
+    WSOL: {address: 'So11111111111111111111111111111111111111112', symbol: 'SOL', decimals: 9},
     UXD: {address: '7kbnvuGBxxj8AG9qp8Scn56muWGaRaFqxg1FsRp3PaFT', symbol: 'UXD', decimals: 6},
     USDH: {address: 'USDH1SM1ojwWUga67PGrgFWUHibbjqMvuMaDkRJTgkX', symbol: 'USDH', decimals: 6},
     MSOL: {address: 'mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So', symbol: 'mSOL', decimals: 9},
