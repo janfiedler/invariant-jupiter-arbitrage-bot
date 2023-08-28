@@ -1,18 +1,27 @@
-require("dotenv").config();
-const anchor = require("@project-serum/anchor");
-const {TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID} = require("@solana/spl-token");
-const {Market, Pair, Network} = require('@invariant-labs/sdk')
-const {Keypair, PublicKey, Connection} = require('@solana/web3.js');
-const {fromFee, simulateSwap, toPercent} = require('@invariant-labs/sdk/lib/utils')
-const {Jupiter} = require("@jup-ag/core");
-const JSBI = require('jsbi');
+import got from "got";
+import dotenv from "dotenv";
+import Anchor from '@project-serum/anchor';
+const { Wallet, Provider, BN, utils } = Anchor;
+import {
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+    TOKEN_PROGRAM_ID,
+  } from "@solana/spl-token";
+import {Market, Pair, Network} from "@invariant-labs/sdk";
+import {Keypair, PublicKey, Connection, VersionedTransaction} from "@solana/web3.js";
+import {fromFee, simulateSwap, toPercent} from "@invariant-labs/sdk/lib/utils.js";
+import JSBI from 'jsbi';
 
+dotenv.config();
 const {KEYPAIR, RPC_ENDPOINT} = process.env;
 
-const {LPs, SETTINGS} = require('./config');
+import {LPs, SETTINGS}  from './config.js';
 
 let secretKey = Uint8Array.from(JSON.parse(KEYPAIR));
+const wallet = new Wallet(
+    Keypair.fromSecretKey(secretKey)
+  );
 let keypair = Keypair.fromSecretKey(secretKey);
+
 
 let connection = new Connection(RPC_ENDPOINT, {confirmTransactionInitialTimeout: 120000});
 
@@ -83,7 +92,7 @@ async function simulateInvariant(LP, fromInvariant, data, amountIn) {
     const result = await simulateSwap({
         xToY: fromInvariant,
         byAmountIn: true,
-        swapAmount: new anchor.BN(amountIn),
+        swapAmount: new BN(amountIn),
         slippage: toPercent(data.invariant.slippage, 1),
         ticks: data.invariant.ticks,
         tickmap: await data.invariant.market.getTickmap(data.invariant.pair),
@@ -122,7 +131,7 @@ async function swapInvariant(fromInvariant, data, amount) {
         xToY: fromInvariant,
         accountX: data.invariant.accountX,
         accountY: data.invariant.accountY,
-        amount: new anchor.BN(amount),
+        amount: new BN(amount),
         byAmountIn: true,
         estimatedPriceAfterSwap: {v: data.resultSimulateInvariant.priceAfterSwap},
         slippage: toPercent(data.invariant.slippage, 1),
@@ -134,7 +143,52 @@ async function swapInvariant(fromInvariant, data, amount) {
     return await data.invariant.market.swap(swapVars, keypair);
 }
 
-async function simulateJupiter(jupiter, onlyDirectRoutes, data, from, to, amount) {
+const getCoinQuote = (inputMint, outputMint, amount) => {
+    if (inputMint == 'So11111111111111111111111111111111111111112' || outputMint == 'So11111111111111111111111111111111111111112') {
+      return got
+        .get(
+          `https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=50&onlyDirectRoutes=true`
+        )
+        .json();
+    } else {
+        return got
+        .get(
+          `https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=50`
+        )
+        .json();
+    }
+  };
+  
+    const getTransaction = async (quoteResponse) => {
+        try {
+            const response = await got.post("https://quote-api.jup.ag/v6/swap", {
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                json: {
+                    quoteResponse,
+                    userPublicKey: wallet.publicKey.toString(),
+                    wrapAndUnwrapSol: false
+                },
+                responseType: 'json'
+            });
+    
+            return response.body;
+    
+        } catch (error) {
+            throw new Error(`Got error: ${error.response.body}`);
+        }
+    };          
+
+async function simulateJupiter(onlyDirectRoutes, data, from, to, amount) {
+
+    const routes = await getCoinQuote(
+        new PublicKey(from.address),
+        new PublicKey(to.address),
+        amount
+      );
+
+    /*
     const routes = await jupiter.computeRoutes({
         inputMint: new PublicKey(from.address), // Mint address of the input token
         outputMint: new PublicKey(to.address), // Mint address of the output token
@@ -144,20 +198,41 @@ async function simulateJupiter(jupiter, onlyDirectRoutes, data, from, to, amount
         onlyDirectRoutes, // It ensures only direct routing and also disable split trade trading
         intermediateTokens: true, // intermediateTokens, if provided will only find routes that use the intermediate tokens
     });
+    */
     return routes;
 
 }
 
-async function swapJupiter(jupiter, routes) {
-// Prepare execute exchange
-    const {execute} = await jupiter.exchange({
-        routeInfo: routes,
-    });
+async function swapJupiter(routes) {
+    const response = await getTransaction(routes);
+    let swapTransaction = response.swapTransaction;
 
-// Execute swap
-    const swapResult = await execute();
-    console.log(swapResult);
-    return swapResult;
+    if (typeof swapTransaction === 'undefined') {
+        console.log('Undefined swapTransaction');
+        process.exit(0);
+      }
+      else {
+        // deserialize the transaction
+        const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
+        var transaction = VersionedTransaction.deserialize(swapTransactionBuf);
+        //console.log(transaction);
+
+        // sign the transaction
+        transaction.sign([wallet.payer]);
+        
+        // Execute the transaction
+        const rawTransaction = transaction.serialize()
+        const txid = await connection.sendRawTransaction(rawTransaction, {
+        skipPreflight: true,
+        maxRetries: 2
+        });
+
+        const result = await connection.confirmTransaction(txid);
+        console.log(`https://solscan.io/tx/${txid}`);
+        //console.log(result);
+        console.log(result.value.err == null);
+        return result.value.err == null;
+    }
 }
 
 async function verifyRequiredBalance(LP, data) {
@@ -187,10 +262,11 @@ async function verifyRequiredBalance(LP, data) {
 }
 
 // create and call async main function
-async function main(LP, fromInvariant, jupiter) {
+async function main(LP, fromInvariant) {
 
     //Create console log with divider
     console.log('-----------------------------------------------------------------------------------------------------------------');
+    console.log("[" + new Date().toISOString() + "]");
     console.log(`Processing ${LP.tokenX.symbol} / ${LP.tokenY.symbol} with amount ${LP.tokenAmount} and fromInvariant ${fromInvariant}`);
 
     try {
@@ -201,24 +277,30 @@ async function main(LP, fromInvariant, jupiter) {
                     LP.tokenX.decimals
                 );
                 LP.dataInvJup.resultSimulateInvariant = await simulateInvariant(LP, fromInvariant, LP.dataInvJup, LP.dataInvJup.xTokenInitialAmount);
-                console.log(`Invarinat => ${LP.dataInvJup.resultSimulateInvariant.accumulatedAmountIn.add(LP.dataInvJup.resultSimulateInvariant.accumulatedFee).toString()} ${LP.tokenX.symbol} => ${LP.dataInvJup.resultSimulateInvariant.accumulatedAmountOut.toString()} ${LP.tokenY.symbol}`)
+                if(LP.dataInvJup.resultSimulateInvariant.accumulatedAmountIn == 0 || LP.dataInvJup.resultSimulateInvariant.accumulatedAmountOut == 0)
+                {
+                    console.log(LP.dataInvJup.resultSimulateInvariant.status);
+                    return;
+                }
+                console.log(`Invarinat => ${transferAmountToUi(LP.dataInvJup.resultSimulateInvariant.accumulatedAmountIn.add(LP.dataInvJup.resultSimulateInvariant.accumulatedFee), LP.tokenX.decimals)} ${LP.tokenX.symbol} => ${transferAmountToUi(LP.dataInvJup.resultSimulateInvariant.accumulatedAmountOut, LP.tokenY.decimals)} ${LP.tokenY.symbol}`)
                 LP.dataInvJup.yTokenBoughtAmount = LP.dataInvJup.resultSimulateInvariant.accumulatedAmountOut;
 
-                LP.dataInvJup.resultSimulateJupiter = await simulateJupiter(jupiter, LP.JUPITER.onlyDirectRoutes, LP.dataInvJup, LP.tokenY, LP.tokenX, JSBI.BigInt(LP.dataInvJup.yTokenBoughtAmount));
-                console.log(`Jupiter => ${JSBI.toNumber(LP.dataInvJup.resultSimulateJupiter.routesInfos[0].inAmount)} ${LP.tokenY.symbol} => ${JSBI.toNumber(LP.dataInvJup.resultSimulateJupiter.routesInfos[0].outAmount)} ${LP.tokenX.symbol}`)
+                LP.dataInvJup.resultSimulateJupiter = await simulateJupiter(LP.JUPITER.onlyDirectRoutes, LP.dataInvJup, LP.tokenY, LP.tokenX, new BN(LP.dataInvJup.yTokenBoughtAmount));
+                console.log(`Jupiter => ${transferAmountToUi(LP.dataInvJup.resultSimulateJupiter.inAmount, LP.tokenY.decimals)} ${LP.tokenY.symbol} => ${transferAmountToUi(LP.dataInvJup.resultSimulateJupiter.outAmount, LP.tokenX.decimals)} ${LP.tokenX.symbol}`);
             }
 
-            const toOutAmount = JSBI.toNumber(LP.dataInvJup.resultSimulateJupiter.routesInfos[0].outAmount);
-            //console.log("fromInAmount", LP.dataInvJup.xTokenInitialAmount);
-            //console.log("toOutAmount", toOutAmount);
-            console.log("diff", (toOutAmount - LP.dataInvJup.xTokenInitialAmount));
+            const toOutAmount = new BN(LP.dataInvJup.resultSimulateJupiter.outAmount);
+            console.log("fromInAmount", transferAmountToUi(LP.dataInvJup.xTokenInitialAmount, LP.tokenX.decimals));
+            console.log("toOutAmount", transferAmountToUi(toOutAmount, LP.tokenX.decimals));
+            console.log("diff", transferAmountToUi((toOutAmount - LP.dataInvJup.xTokenInitialAmount), LP.tokenX.decimals));
             if ((toOutAmount > LP.dataInvJup.xTokenInitialAmount) && ((toOutAmount - LP.dataInvJup.xTokenInitialAmount) > LP.minUnitProfit)) {
 
                 console.log("Swap out is bigger than swap in");
                 if (LP.dataInvJup.state === 0) {
                     console.log("Processing Invariant swap");
                     const resultInvariantSwap = await swapInvariant(fromInvariant, LP.dataInvJup, LP.dataInvJup.xTokenInitialAmount);
-                    console.log("Invariant swap done", resultInvariantSwap);
+                    console.log("Invariant swap done");
+                    console.log(`https://solscan.io/tx/${resultInvariantSwap}`);
                     if (resultInvariantSwap) {
                         LP.dataInvJup.state = 1
                     }
@@ -231,14 +313,14 @@ async function main(LP, fromInvariant, jupiter) {
                     }
                 }
                 console.log("Processing Jupiter swap");
-                const resultJupiterSwap = await swapJupiter(jupiter, LP.dataInvJup.resultSimulateJupiter.routesInfos[0]);
-                if (resultJupiterSwap.error) {
-                    return;
-                } else if (resultJupiterSwap.txid) {
+                const resultJupiterSwap = await swapJupiter(LP.dataInvJup.resultSimulateJupiter);
+                if (resultJupiterSwap) {
                     LP.dataInvJup.state = 0;
                     console.log("Jupiter swap done");
                     LP.tempLoopTimeout = 0;
                     await shouldWait(LP);
+                } else {
+                    return;
                 }
             } else {
                 console.log("Swap in is bigger than swap out");
@@ -249,30 +331,30 @@ async function main(LP, fromInvariant, jupiter) {
                     LP.tokenAmount,
                     LP.tokenX.decimals
                 );
-                LP.dataJupInv.resultSimulateJupiter = await simulateJupiter(jupiter, LP.JUPITER.onlyDirectRoutes, LP.dataJupInv, LP.tokenX, LP.tokenY, JSBI.BigInt(LP.dataJupInv.xTokenInitialAmount));
-                console.log(`Jupiter => ${JSBI.toNumber(LP.dataJupInv.resultSimulateJupiter.routesInfos[0].inAmount)} ${LP.tokenX.symbol} => ${JSBI.toNumber(LP.dataJupInv.resultSimulateJupiter.routesInfos[0].outAmount)} ${LP.tokenY.symbol}`)
-                LP.dataJupInv.yTokenBoughtAmount = JSBI.toNumber(LP.dataJupInv.resultSimulateJupiter.routesInfos[0].outAmount);
+                LP.dataJupInv.resultSimulateJupiter = await simulateJupiter(LP.JUPITER.onlyDirectRoutes, LP.dataJupInv, LP.tokenX, LP.tokenY, new BN(LP.dataJupInv.xTokenInitialAmount));
+                console.log(`Jupiter => ${transferAmountToUi(LP.dataJupInv.resultSimulateJupiter.inAmount, LP.tokenX.decimals)} ${LP.tokenX.symbol} => ${transferAmountToUi(LP.dataJupInv.resultSimulateJupiter.outAmount, LP.tokenY.decimals)} ${LP.tokenY.symbol}`);
+                LP.dataJupInv.yTokenBoughtAmount = new BN(LP.dataJupInv.resultSimulateJupiter.outAmount);
 
                 LP.dataJupInv.resultSimulateInvariant = await simulateInvariant(LP, fromInvariant, LP.dataJupInv, LP.dataJupInv.yTokenBoughtAmount);
-                console.log(`Invariant => ${LP.dataJupInv.resultSimulateInvariant.accumulatedAmountIn} (fee:${LP.dataJupInv.resultSimulateInvariant.accumulatedFee}) ${LP.tokenY.symbol} => ${LP.dataJupInv.resultSimulateInvariant.accumulatedAmountOut.toString()} ${LP.tokenX.symbol}`)
+                console.log(`Invariant => ${transferAmountToUi(LP.dataJupInv.resultSimulateInvariant.accumulatedAmountIn, LP.tokenY.decimals)} (fee:${transferAmountToUi(LP.dataJupInv.resultSimulateInvariant.accumulatedFee, LP.tokenY.decimals)}) ${LP.tokenY.symbol} => ${transferAmountToUi(LP.dataJupInv.resultSimulateInvariant.accumulatedAmountOut, LP.tokenX.decimals)} ${LP.tokenX.symbol}`);
             }
 
             const toOutAmount = Number(LP.dataJupInv.resultSimulateInvariant.accumulatedAmountOut);
-            //console.log("fromInAmount", LP.dataJupInv.xTokenInitialAmount);
-            //console.log("toOutAmount", toOutAmount);
-            console.log("diff", (toOutAmount - LP.dataJupInv.xTokenInitialAmount));
+            console.log("fromInAmount", transferAmountToUi(LP.dataJupInv.xTokenInitialAmount, LP.tokenX.decimals));
+            console.log("toOutAmount", transferAmountToUi(toOutAmount, LP.tokenX.decimals));
+            console.log("diff", transferAmountToUi((toOutAmount - LP.dataJupInv.xTokenInitialAmount), LP.tokenY.decimals));
             if ((toOutAmount > LP.dataJupInv.xTokenInitialAmount) && ((toOutAmount - LP.dataJupInv.xTokenInitialAmount) > LP.minUnitProfit)) {
                 if (LP.dataJupInv.state === 0) {
                     console.log("Swap out is bigger than swap in");
                     console.log("Processing jupiter swap");
-                    const resultJupiterSwap = await swapJupiter(jupiter, LP.dataJupInv.resultSimulateJupiter.routesInfos[0]);
-                    if (resultJupiterSwap.error) {
-                        return;
-                    } else if (resultJupiterSwap.txid) {
+                    const resultJupiterSwap = await swapJupiter(LP.dataJupInv.resultSimulateJupiter);
+                    if (resultJupiterSwap) {
                         LP.dataJupInv.state = 1;
-                        LP.dataJupInv.yTokenBoughtAmount = resultJupiterSwap.outputAmount;
+                        LP.dataJupInv.yTokenBoughtAmount = LP.dataJupInv.resultSimulateJupiter.outAmount;
                         console.log("Jupiter swap done");
                         await shouldWait(LP);
+                    } else {
+                        return;
                     }
 
                 } else if (LP.dataJupInv.state === 1 && !LP.bothAssets) {
@@ -288,7 +370,8 @@ async function main(LP, fromInvariant, jupiter) {
                 if (resultInvariantSwap) {
                     LP.dataJupInv.state = 0;
                     LP.tempLoopTimeout = 0;
-                    console.log("Invariant swap done", resultInvariantSwap);
+                    console.log("Invariant swap done");
+                    console.log(`https://solscan.io/tx/${resultInvariantSwap}`);
                     await shouldWait(LP);
                 }
             } else {
@@ -307,7 +390,7 @@ async function shouldWait(LP) {
     }
 }
 
-async function begin(jupiter) {
+async function begin() {
     // If running true, do job else return and finish
     if (running) {
         let skipLoopTimeout = false;
@@ -322,12 +405,12 @@ async function begin(jupiter) {
 
             //First try trade same way as last cycle (don't waste time with opposite trade)
             if (LP.fromInvariant) {
-                await main(LP, true, jupiter);
+                await main(LP, true);
                 LP.fromInvariant = LP.tempLoopTimeout === 0;
             }
             //If swap fromInvariant toJupiter not executed, try fromJupiter toInvariant
             if (!LP.fromInvariant) {
-                await main(LP, false, jupiter);
+                await main(LP, false);
                 LP.fromInvariant = LP.tempLoopTimeout !== 0;
             }
             // If skipLoopTimeout is false, check if LP swap completed. Then do not sleep and do new loop timidity
@@ -338,20 +421,12 @@ async function begin(jupiter) {
         if (!skipLoopTimeout) {
             await sleep(SETTINGS.LOOP_TIMEOUT * 1000);
         }
-        begin(jupiter);
+        begin();
     }
 }
 
 // Create empty async function that start immediately
 (async () => {
     //Init jupiter
-    const jupiter = await Jupiter.load({
-        connection,
-        cluster: "mainnet-beta",
-        user: keypair, // or public key
-        // platformFeeAndAccounts:  NO_PLATFORM_FEE,
-        routeCacheDuration: 0, // refetch data on computeRoutes
-        wrapUnwrapSOL: false
-    });
-    begin(jupiter);
+    begin();
 })();
