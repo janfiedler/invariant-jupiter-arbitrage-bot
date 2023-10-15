@@ -331,6 +331,12 @@ async function main(LP, fromInvariant) {
                     const resultJupiterSwap = await swapJupiter(LP.dataInvJup.resultSimulateJupiter);
                     if (resultJupiterSwap) {
                         LP.dataInvJup.state = 0;
+                    } else {
+                        LP.dataInvJup.errorCounter++;
+                        if (LP.dataInvJup.errorCounter >= 3) {
+                            console.log("Error counter is more than 3, reset and lets do new trade");
+                            LP.dataInvJup.state = 0;
+                        }
                     }
                 }
             } else {
@@ -374,6 +380,12 @@ async function main(LP, fromInvariant) {
                     const resultJupiterSwap = await swapJupiter(LP.dataJupInv.resultSimulateJupiter);
                     if (resultJupiterSwap) {
                         LP.dataJupInv.state = 0;
+                    } else {
+                        LP.dataJupInv.errorCounter++;
+                        if (LP.dataJupInv.errorCounter >= 3) {
+                            console.log("Error counter is more than 3, reset and lets do new trade");
+                            LP.dataJupInv.state = 0;
+                        }
                     }
                 } else if (LP.dataJupInv.state === 2) {
                     const resultInvariantSwap = await swapInvariant(fromInvariant, LP.dataJupInv, LP.dataJupInv.yTokenBoughtAmount);
