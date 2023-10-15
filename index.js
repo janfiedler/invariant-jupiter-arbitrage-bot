@@ -5,25 +5,25 @@ const { Wallet, Provider, BN, utils } = Anchor;
 import {
     ASSOCIATED_TOKEN_PROGRAM_ID,
     TOKEN_PROGRAM_ID,
-  } from "@solana/spl-token";
-import {Market, Pair, Network} from "@invariant-labs/sdk";
-import {Keypair, PublicKey, Connection, VersionedTransaction} from "@solana/web3.js";
-import {fromFee, simulateSwap, toPercent} from "@invariant-labs/sdk/lib/utils.js";
+} from "@solana/spl-token";
+import { Market, Pair, Network } from "@invariant-labs/sdk";
+import { Keypair, PublicKey, Connection, VersionedTransaction } from "@solana/web3.js";
+import { fromFee, simulateSwap, toPercent } from "@invariant-labs/sdk/lib/utils.js";
 import JSBI from 'jsbi';
 
 dotenv.config();
-const {KEYPAIR, RPC_ENDPOINT} = process.env;
+const { KEYPAIR, RPC_ENDPOINT } = process.env;
 
-import {LPs, SETTINGS}  from './config.js';
+import { LPs, SETTINGS } from './config.js';
 
 let secretKey = Uint8Array.from(JSON.parse(KEYPAIR));
 const wallet = new Wallet(
     Keypair.fromSecretKey(secretKey)
-  );
+);
 let keypair = Keypair.fromSecretKey(secretKey);
 
 
-let connection = new Connection(RPC_ENDPOINT, {confirmTransactionInitialTimeout: 120000});
+let connection = new Connection(RPC_ENDPOINT, { confirmTransactionInitialTimeout: 120000 });
 
 // Catch request to exit process, wait until round is finished
 let running = true;
@@ -61,7 +61,7 @@ async function getTokenAddressBalance(tokenOutAddress) {
     // Verify that tokenOut is zero in the wallet
     let tokenAccounts = await connection.getParsedTokenAccountsByOwner(
         keypair.publicKey,
-        {programId: TOKEN_PROGRAM_ID}
+        { programId: TOKEN_PROGRAM_ID }
     );
     // Filter fromm all tokens in wallet only tokenOut address
     tokenAccounts.value = tokenAccounts.value.filter(
@@ -76,7 +76,7 @@ async function getTokenAddressBalance(tokenOutAddress) {
 }
 
 async function simulateInvariant(LP, fromInvariant, data, amountIn) {
-    const {tokenX, tokenY, invariantFee} = LP;
+    const { tokenX, tokenY, invariantFee } = LP;
     data.invariant.tokenXAddress = tokenX.address;
     data.invariant.tokenYAddress = tokenY.address;
     data.invariant.market = data.invariant.market === null ? await Market.build(Network.MAIN, keypair, connection) : data.invariant.market;
@@ -103,6 +103,7 @@ async function simulateInvariant(LP, fromInvariant, data, amountIn) {
 }
 
 async function swapInvariant(fromInvariant, data, amount) {
+    console.log("Processing Invariant swap");
     // Get the associated account for the token in wallet if not already found
     if (data.invariant.accountX === null || data.invariant.accountY === null) {
         const [accountX, accountY] = await Promise.all([
@@ -133,60 +134,56 @@ async function swapInvariant(fromInvariant, data, amount) {
         accountY: data.invariant.accountY,
         amount: new BN(amount),
         byAmountIn: true,
-        estimatedPriceAfterSwap: {v: data.resultSimulateInvariant.priceAfterSwap},
+        estimatedPriceAfterSwap: { v: data.resultSimulateInvariant.priceAfterSwap },
         slippage: toPercent(data.invariant.slippage, 1),
         pair: data.invariant.pair,
         owner: keypair.publicKey,
     }
 
     //Perform the swap
-    return await data.invariant.market.swap(swapVars, keypair);
+    let resultInvariantSwap = await data.invariant.market.swap(swapVars, keypair);
+    console.log("Invariant swap done");
+    console.log(`https://solscan.io/tx/${resultInvariantSwap}`);
+    return resultInvariantSwap;
 }
 
-const getCoinQuote = (inputMint, outputMint, amount) => {
-    if (inputMint == 'So11111111111111111111111111111111111111112' || outputMint == 'So11111111111111111111111111111111111111112') {
-      return got
+const getCoinQuote = (onlyDirectRoutes, inputMint, outputMint, amount) => {
+    return got
         .get(
-          `https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=50&onlyDirectRoutes=true`
+            `https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=50&onlyDirectRoutes=${onlyDirectRoutes}`
         )
         .json();
-    } else {
-        return got
-        .get(
-          `https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=50`
-        )
-        .json();
+};
+
+const getTransaction = async (quoteResponse) => {
+    try {
+        const response = await got.post("https://quote-api.jup.ag/v6/swap", {
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            json: {
+                quoteResponse,
+                userPublicKey: wallet.publicKey.toString(),
+                wrapAndUnwrapSol: false
+            },
+            responseType: 'json'
+        });
+
+        return response.body;
+
+    } catch (error) {
+        throw new Error(`Got error: ${error.response.body}`);
     }
-  };
-  
-    const getTransaction = async (quoteResponse) => {
-        try {
-            const response = await got.post("https://quote-api.jup.ag/v6/swap", {
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                json: {
-                    quoteResponse,
-                    userPublicKey: wallet.publicKey.toString(),
-                    wrapAndUnwrapSol: false
-                },
-                responseType: 'json'
-            });
-    
-            return response.body;
-    
-        } catch (error) {
-            throw new Error(`Got error: ${error.response.body}`);
-        }
-    };          
+};
 
 async function simulateJupiter(onlyDirectRoutes, data, from, to, amount) {
 
     const routes = await getCoinQuote(
+        onlyDirectRoutes,
         new PublicKey(from.address),
         new PublicKey(to.address),
         amount
-      );
+    );
 
     /*
     const routes = await jupiter.computeRoutes({
@@ -204,35 +201,52 @@ async function simulateJupiter(onlyDirectRoutes, data, from, to, amount) {
 }
 
 async function swapJupiter(routes) {
-    const response = await getTransaction(routes);
-    let swapTransaction = response.swapTransaction;
-
-    if (typeof swapTransaction === 'undefined') {
-        console.log('Undefined swapTransaction');
-        process.exit(0);
-      }
-      else {
-        // deserialize the transaction
-        const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
-        var transaction = VersionedTransaction.deserialize(swapTransactionBuf);
-        //console.log(transaction);
-
-        // sign the transaction
-        transaction.sign([wallet.payer]);
-        
-        // Execute the transaction
-        const rawTransaction = transaction.serialize()
-        const txid = await connection.sendRawTransaction(rawTransaction, {
-        skipPreflight: true,
-        maxRetries: 2
-        });
-
-        const result = await connection.confirmTransaction(txid);
-        console.log(`https://solscan.io/tx/${txid}`);
-        //console.log(result);
-        console.log(result.value.err == null);
-        return result.value.err == null;
-    }
+    try{
+        console.log("Processing jupiter swap");
+        const response = await getTransaction(routes);
+        let swapTransaction = response.swapTransaction;
+    
+        if (typeof swapTransaction === 'undefined') {
+            console.log('Undefined swapTransaction');
+            process.exit(0);
+        }
+        else {
+            // deserialize the transaction
+            const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
+            var transaction = VersionedTransaction.deserialize(swapTransactionBuf);
+            //console.log(transaction);
+    
+            // sign the transaction
+            transaction.sign([wallet.payer]);
+    
+            // Execute the transaction
+            const rawTransaction = transaction.serialize()
+            const txid = await connection.sendRawTransaction(rawTransaction, {
+                skipPreflight: true,
+                maxRetries: 2
+            });
+    
+            const result = await connection.confirmTransaction(txid);
+            if (result.value.err != null) {
+                console.log("Jupiter swap failed:");
+                console.log(result.value.err);
+                if(result.value.err.InstructionError) {
+                    //this is fatal error, not worth to retry
+                    return true;
+                }
+            } else {
+                console.log("Jupiter swap done");
+                console.log(`https://solscan.io/tx/${txid}`);
+            }
+            //console.log(result);
+            //console.log(result.value.err == null);
+            return result.value.err == null;
+        }
+    } catch (error) {
+        console.log("Jupiter swap exception:");
+        console.log(error);
+        return false;
+    } 
 }
 
 async function verifyRequiredBalance(LP, data) {
@@ -277,8 +291,7 @@ async function main(LP, fromInvariant) {
                     LP.tokenX.decimals
                 );
                 LP.dataInvJup.resultSimulateInvariant = await simulateInvariant(LP, fromInvariant, LP.dataInvJup, LP.dataInvJup.xTokenInitialAmount);
-                if(LP.dataInvJup.resultSimulateInvariant.accumulatedAmountIn == 0 || LP.dataInvJup.resultSimulateInvariant.accumulatedAmountOut == 0)
-                {
+                if (LP.dataInvJup.resultSimulateInvariant.accumulatedAmountIn == 0 || LP.dataInvJup.resultSimulateInvariant.accumulatedAmountOut == 0) {
                     console.log(LP.dataInvJup.resultSimulateInvariant.status);
                     return;
                 }
@@ -297,30 +310,28 @@ async function main(LP, fromInvariant) {
 
                 console.log("Swap out is bigger than swap in");
                 if (LP.dataInvJup.state === 0) {
-                    console.log("Processing Invariant swap");
-                    const resultInvariantSwap = await swapInvariant(fromInvariant, LP.dataInvJup, LP.dataInvJup.xTokenInitialAmount);
-                    console.log("Invariant swap done");
-                    console.log(`https://solscan.io/tx/${resultInvariantSwap}`);
-                    if (resultInvariantSwap) {
-                        LP.dataInvJup.state = 1
-                    }
-                } else if (LP.dataInvJup.state === 1 && !LP.bothAssets) {
-                    console.log("Continue with Jupiter swap after some error");
-                    //Need verification of balance after failed swap
-                    const resultRequiredBalance = await verifyRequiredBalance(LP, LP.dataInvJup);
-                    if (!resultRequiredBalance) {
-                        return;
+                    const [resultInvariantSwap, resultJupiterSwap] = await Promise.all([swapInvariant(fromInvariant, LP.dataInvJup, LP.dataInvJup.xTokenInitialAmount),
+                                                                                        swapJupiter(LP.dataInvJup.resultSimulateJupiter)]);
+                    if (resultInvariantSwap && resultJupiterSwap) {
+                        LP.dataInvJup.state = 0;
+                        LP.tempLoopTimeout = 0;
+                    } else if (!resultInvariantSwap && resultJupiterSwap) {
+                        LP.dataInvJup.state = 1;
+                    } else if (resultInvariantSwap && !resultJupiterSwap) {
+                        LP.dataInvJup.state = 2
                     }
                 }
-                console.log("Processing Jupiter swap");
-                const resultJupiterSwap = await swapJupiter(LP.dataInvJup.resultSimulateJupiter);
-                if (resultJupiterSwap) {
-                    LP.dataInvJup.state = 0;
-                    console.log("Jupiter swap done");
-                    LP.tempLoopTimeout = 0;
-                    await shouldWait(LP);
-                } else {
-                    return;
+
+                if (LP.dataInvJup.state === 1) {
+                    const resultInvariantSwap = await swapInvariant(fromInvariant, LP.dataInvJup, LP.dataInvJup.xTokenInitialAmount);
+                    if (resultInvariantSwap) {
+                        LP.dataInvJup.state = 0;
+                    }
+                } else if (LP.dataInvJup.state === 2) {
+                    const resultJupiterSwap = await swapJupiter(LP.dataInvJup.resultSimulateJupiter);
+                    if (resultJupiterSwap) {
+                        LP.dataInvJup.state = 0;
+                    }
                 }
             } else {
                 console.log("Swap in is bigger than swap out");
@@ -344,35 +355,31 @@ async function main(LP, fromInvariant) {
             console.log("toOutAmount", transferAmountToUi(toOutAmount, LP.tokenX.decimals));
             console.log("diff", transferAmountToUi((toOutAmount - LP.dataJupInv.xTokenInitialAmount), LP.tokenY.decimals));
             if ((toOutAmount > LP.dataJupInv.xTokenInitialAmount) && ((toOutAmount - LP.dataJupInv.xTokenInitialAmount) > LP.minUnitProfit)) {
-                if (LP.dataJupInv.state === 0) {
-                    console.log("Swap out is bigger than swap in");
-                    console.log("Processing jupiter swap");
-                    const resultJupiterSwap = await swapJupiter(LP.dataJupInv.resultSimulateJupiter);
-                    if (resultJupiterSwap) {
-                        LP.dataJupInv.state = 1;
-                        LP.dataJupInv.yTokenBoughtAmount = LP.dataJupInv.resultSimulateJupiter.outAmount;
-                        console.log("Jupiter swap done");
-                        await shouldWait(LP);
-                    } else {
-                        return;
-                    }
 
-                } else if (LP.dataJupInv.state === 1 && !LP.bothAssets) {
-                    console.log("Continue with Invariant swap after some error");
-                    //Need verification of balance after failed swap
-                    const resultRequiredBalance = await verifyRequiredBalance(LP, LP.dataJupInv);
-                    if (!resultRequiredBalance) {
-                        return;
+                console.log("Swap out is bigger than swap in");
+                if (LP.dataJupInv.state === 0) {
+                    const [resultJupiterSwap, resultInvariantSwap] = await Promise.all([swapJupiter(LP.dataJupInv.resultSimulateJupiter),
+                                                                                        swapInvariant(fromInvariant, LP.dataJupInv, LP.dataJupInv.yTokenBoughtAmount)]);
+                    if (resultJupiterSwap && resultInvariantSwap) {
+                        LP.dataJupInv.state = 0;
+                        LP.tempLoopTimeout = 0;
+                    } else if (!resultJupiterSwap && resultInvariantSwap) {
+                        LP.dataJupInv.state = 1;
+                    } else if (resultJupiterSwap && !resultInvariantSwap) {
+                        LP.dataJupInv.state = 2
                     }
                 }
-                console.log("Processing Invariant swap");
-                const resultInvariantSwap = await swapInvariant(fromInvariant, LP.dataJupInv, LP.dataJupInv.yTokenBoughtAmount);
-                if (resultInvariantSwap) {
-                    LP.dataJupInv.state = 0;
-                    LP.tempLoopTimeout = 0;
-                    console.log("Invariant swap done");
-                    console.log(`https://solscan.io/tx/${resultInvariantSwap}`);
-                    await shouldWait(LP);
+
+                if (LP.dataJupInv.state === 1) {
+                    const resultJupiterSwap = await swapJupiter(LP.dataJupInv.resultSimulateJupiter);
+                    if (resultJupiterSwap) {
+                        LP.dataJupInv.state = 0;
+                    }
+                } else if (LP.dataJupInv.state === 2) {
+                    const resultInvariantSwap = await swapInvariant(fromInvariant, LP.dataJupInv, LP.dataJupInv.yTokenBoughtAmount);
+                    if (resultInvariantSwap) {
+                        LP.dataJupInv.state = 0;
+                    }
                 }
             } else {
                 console.log("Swap in is bigger than swap out");
