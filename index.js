@@ -318,7 +318,8 @@ async function main(LP, fromInvariant) {
                     } else if (!resultInvariantSwap && resultJupiterSwap) {
                         LP.dataInvJup.state = 1;
                     } else if (resultInvariantSwap && !resultJupiterSwap) {
-                        LP.dataInvJup.state = 2
+                        LP.dataInvJup.state = 2;
+                        LP.dataInvJup.errorCounter++;
                     }
                 }
 
@@ -371,6 +372,7 @@ async function main(LP, fromInvariant) {
                         LP.tempLoopTimeout = 0;
                     } else if (!resultJupiterSwap && resultInvariantSwap) {
                         LP.dataJupInv.state = 1;
+                        LP.dataJupInv.errorCounter++;
                     } else if (resultJupiterSwap && !resultInvariantSwap) {
                         LP.dataJupInv.state = 2
                     }
