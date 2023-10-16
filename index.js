@@ -238,10 +238,11 @@ async function swapJupiter(routes) {
     
             const result = await connection.confirmTransaction(txid);
             if (result.value.err != null) {
-                console.log("Jupiter swap failed:");
+                console.error("Jupiter swap failed:");
                 console.log(result.value.err);
                 if(result.value.err.InstructionError) {
                     //this is fatal error, not worth to retry
+                    console.error("this is fatal error, not worth to retry!");
                     return true;
                 }
             } else {
@@ -253,8 +254,8 @@ async function swapJupiter(routes) {
             return result.value.err == null;
         }
     } catch (error) {
-        console.log("Jupiter swap exception:");
-        console.log(error);
+        console.error("Jupiter swap exception:");
+        console.error(error);
         return false;
     } 
 }
