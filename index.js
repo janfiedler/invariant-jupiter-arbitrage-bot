@@ -348,6 +348,7 @@ async function main(LP, fromInvariant) {
                 } else if (LP.dataInvJup.state === 2) {
                     const resultJupiterSwap = await swapJupiter(LP.dataInvJup.resultSimulateJupiter);
                     if (resultJupiterSwap) {
+                        LP.dataInvJup.errorCounter = 0;
                         LP.dataInvJup.state = 0;
                     } else {
                         LP.dataInvJup.errorCounter++;
@@ -405,6 +406,7 @@ async function main(LP, fromInvariant) {
                 if (LP.dataJupInv.state === 1) {
                     const resultJupiterSwap = await swapJupiter(LP.dataJupInv.resultSimulateJupiter);
                     if (resultJupiterSwap) {
+                        LP.dataJupInv.errorCounter = 0;
                         LP.dataJupInv.state = 0;
                     } else {
                         LP.dataJupInv.errorCounter++;
