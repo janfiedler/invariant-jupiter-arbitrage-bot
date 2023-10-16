@@ -76,30 +76,36 @@ async function getTokenAddressBalance(tokenOutAddress) {
 }
 
 async function simulateInvariant(LP, fromInvariant, data, amountIn) {
-    const { tokenX, tokenY, invariantFee } = LP;
-    data.invariant.tokenXAddress = tokenX.address;
-    data.invariant.tokenYAddress = tokenY.address;
-    data.invariant.market = data.invariant.market === null ? await Market.build(Network.MAIN, keypair, connection) : data.invariant.market;
-    data.invariant.pair = data.invariant.pair === null ? new Pair(new PublicKey(data.invariant.tokenXAddress), new PublicKey(data.invariant.tokenYAddress), invariantFee) : data.invariant.pair;
-
-    data.invariant.ticks = new Map(
-        (await data.invariant.market.getAllTicks(data.invariant.pair)).map(tick => {
-            return [tick.index, tick]
-        })
-    )
-    data.invariant.poolData = await data.invariant.market.getPool(data.invariant.pair);
-
-    const result = await simulateSwap({
-        xToY: fromInvariant,
-        byAmountIn: true,
-        swapAmount: new BN(amountIn),
-        slippage: toPercent(data.invariant.slippage, 1),
-        ticks: data.invariant.ticks,
-        tickmap: await data.invariant.market.getTickmap(data.invariant.pair),
-        pool: data.invariant.poolData
-    });
-
-    return result;
+    try {
+        const { tokenX, tokenY, invariantFee } = LP;
+        data.invariant.tokenXAddress = tokenX.address;
+        data.invariant.tokenYAddress = tokenY.address;
+        data.invariant.market = data.invariant.market === null ? await Market.build(Network.MAIN, keypair, connection) : data.invariant.market;
+        data.invariant.pair = data.invariant.pair === null ? new Pair(new PublicKey(data.invariant.tokenXAddress), new PublicKey(data.invariant.tokenYAddress), invariantFee) : data.invariant.pair;
+    
+        data.invariant.ticks = new Map(
+            (await data.invariant.market.getAllTicks(data.invariant.pair)).map(tick => {
+                return [tick.index, tick]
+            })
+        )
+        data.invariant.poolData = await data.invariant.market.getPool(data.invariant.pair);
+    
+        const result = await simulateSwap({
+            xToY: fromInvariant,
+            byAmountIn: true,
+            swapAmount: new BN(amountIn),
+            slippage: toPercent(data.invariant.slippage, 1),
+            ticks: data.invariant.ticks,
+            tickmap: await data.invariant.market.getTickmap(data.invariant.pair),
+            pool: data.invariant.poolData
+        });
+    
+        return result;
+    } catch (error) {
+        console.log("Invariant simulate exception:");
+        console.log(error);
+        return null;
+    }
 }
 
 async function swapInvariant(fromInvariant, data, amount) {
@@ -177,14 +183,19 @@ const getTransaction = async (quoteResponse) => {
 };
 
 async function simulateJupiter(onlyDirectRoutes, data, from, to, amount) {
-
-    const routes = await getCoinQuote(
-        onlyDirectRoutes,
-        new PublicKey(from.address),
-        new PublicKey(to.address),
-        amount
-    );
-
+    try{
+        const routes = await getCoinQuote(
+            onlyDirectRoutes,
+            new PublicKey(from.address),
+            new PublicKey(to.address),
+            amount
+        );
+        return routes;
+    } catch (error) {
+        console.log("Jupiter simulate exception:");
+        console.log(error);
+        return null;
+    }
     /*
     const routes = await jupiter.computeRoutes({
         inputMint: new PublicKey(from.address), // Mint address of the input token
@@ -196,7 +207,6 @@ async function simulateJupiter(onlyDirectRoutes, data, from, to, amount) {
         intermediateTokens: true, // intermediateTokens, if provided will only find routes that use the intermediate tokens
     });
     */
-    return routes;
 
 }
 
@@ -291,6 +301,9 @@ async function main(LP, fromInvariant) {
                     LP.tokenX.decimals
                 );
                 LP.dataInvJup.resultSimulateInvariant = await simulateInvariant(LP, fromInvariant, LP.dataInvJup, LP.dataInvJup.xTokenInitialAmount);
+                if (LP.dataInvJup.resultSimulateInvariant === null) {
+                    return;
+                }
                 if (LP.dataInvJup.resultSimulateInvariant.accumulatedAmountIn == 0 || LP.dataInvJup.resultSimulateInvariant.accumulatedAmountOut == 0) {
                     console.log(LP.dataInvJup.resultSimulateInvariant.status);
                     return;
@@ -299,6 +312,9 @@ async function main(LP, fromInvariant) {
                 LP.dataInvJup.yTokenBoughtAmount = LP.dataInvJup.resultSimulateInvariant.accumulatedAmountOut;
 
                 LP.dataInvJup.resultSimulateJupiter = await simulateJupiter(LP.JUPITER.onlyDirectRoutes, LP.dataInvJup, LP.tokenY, LP.tokenX, new BN(LP.dataInvJup.yTokenBoughtAmount));
+                if (LP.dataInvJup.resultSimulateJupiter === null) {
+                    return ;
+                }
                 console.log(`Jupiter => ${transferAmountToUi(LP.dataInvJup.resultSimulateJupiter.inAmount, LP.tokenY.decimals)} ${LP.tokenY.symbol} => ${transferAmountToUi(LP.dataInvJup.resultSimulateJupiter.outAmount, LP.tokenX.decimals)} ${LP.tokenX.symbol}`);
             }
 
@@ -336,6 +352,7 @@ async function main(LP, fromInvariant) {
                         LP.dataInvJup.errorCounter++;
                         if (LP.dataInvJup.errorCounter >= 3) {
                             console.log("Error counter is more than 3, reset and lets do new trade");
+                            LP.dataInvJup.errorCounter = 0;
                             LP.dataInvJup.state = 0;
                         }
                     }
@@ -350,10 +367,16 @@ async function main(LP, fromInvariant) {
                     LP.tokenX.decimals
                 );
                 LP.dataJupInv.resultSimulateJupiter = await simulateJupiter(LP.JUPITER.onlyDirectRoutes, LP.dataJupInv, LP.tokenX, LP.tokenY, new BN(LP.dataJupInv.xTokenInitialAmount));
+                if (LP.dataJupInv.resultSimulateJupiter === null) {
+                    return;
+                }
                 console.log(`Jupiter => ${transferAmountToUi(LP.dataJupInv.resultSimulateJupiter.inAmount, LP.tokenX.decimals)} ${LP.tokenX.symbol} => ${transferAmountToUi(LP.dataJupInv.resultSimulateJupiter.outAmount, LP.tokenY.decimals)} ${LP.tokenY.symbol}`);
                 LP.dataJupInv.yTokenBoughtAmount = new BN(LP.dataJupInv.resultSimulateJupiter.outAmount);
 
                 LP.dataJupInv.resultSimulateInvariant = await simulateInvariant(LP, fromInvariant, LP.dataJupInv, LP.dataJupInv.yTokenBoughtAmount);
+                if (LP.dataJupInv.resultSimulateInvariant === null) {
+                    return;
+                }
                 console.log(`Invariant => ${transferAmountToUi(LP.dataJupInv.resultSimulateInvariant.accumulatedAmountIn, LP.tokenY.decimals)} (fee:${transferAmountToUi(LP.dataJupInv.resultSimulateInvariant.accumulatedFee, LP.tokenY.decimals)}) ${LP.tokenY.symbol} => ${transferAmountToUi(LP.dataJupInv.resultSimulateInvariant.accumulatedAmountOut, LP.tokenX.decimals)} ${LP.tokenX.symbol}`);
             }
 
@@ -386,6 +409,7 @@ async function main(LP, fromInvariant) {
                         LP.dataJupInv.errorCounter++;
                         if (LP.dataJupInv.errorCounter >= 3) {
                             console.log("Error counter is more than 3, reset and lets do new trade");
+                            LP.dataJupInv.errorCounter = 0;
                             LP.dataJupInv.state = 0;
                         }
                     }
