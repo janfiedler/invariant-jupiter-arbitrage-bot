@@ -23,7 +23,7 @@ const wallet = new Wallet(
 let keypair = Keypair.fromSecretKey(secretKey);
 
 
-let connection = new Connection(RPC_ENDPOINT, { confirmTransactionInitialTimeout: 120000 });
+let connection = new Connection(RPC_ENDPOINT, { confirmTransactionInitialTimeout: 30000 });
 
 // Catch request to exit process, wait until round is finished
 let running = true;
@@ -238,12 +238,15 @@ async function swapJupiter(routes) {
     
             const result = await connection.confirmTransaction(txid);
             if (result.value.err != null) {
-                console.error("Jupiter swap failed:");
+                console.error(`Jupiter swap failed: https://solscan.io/tx/${txid}`);
                 console.log(result.value.err);
                 if(result.value.err.InstructionError) {
                     //this is fatal error, not worth to retry
                     console.error("this is fatal error, not worth to retry!");
                     return true;
+
+                   //console.error("Instruction error, retrying Jupiter swap");
+                   //await swapJupiter(routes);
                 }
             } else {
                 console.log("Jupiter swap done");
@@ -256,6 +259,11 @@ async function swapJupiter(routes) {
     } catch (error) {
         console.error("Jupiter swap exception:");
         console.error(error);
+        if(error.InstructionError) {
+            //this is fatal error, not worth to retry
+            console.error("this is fatal error, not worth to retry!");
+            return true;
+        }
         return false;
     } 
 }
@@ -346,16 +354,19 @@ async function main(LP, fromInvariant) {
                         LP.dataInvJup.state = 0;
                     }
                 } else if (LP.dataInvJup.state === 2) {
-                    const resultJupiterSwap = await swapJupiter(LP.dataInvJup.resultSimulateJupiter);
-                    if (resultJupiterSwap) {
-                        LP.dataInvJup.errorCounter = 0;
-                        LP.dataInvJup.state = 0;
-                    } else {
-                        LP.dataInvJup.errorCounter++;
-                        if (LP.dataInvJup.errorCounter >= 3) {
-                            console.log("Error counter is more than 3, reset and lets do new trade");
+                    while (LP.dataInvJup.state === 2) {
+                        const resultJupiterSwap = await swapJupiter(LP.dataInvJup.resultSimulateJupiter);
+                        if (resultJupiterSwap) {
                             LP.dataInvJup.errorCounter = 0;
                             LP.dataInvJup.state = 0;
+                        } else {
+                            console.log("Error counter is: " + LP.dataInvJup.errorCounter);
+                            LP.dataInvJup.errorCounter++;
+                            if (LP.dataInvJup.errorCounter > 3) {
+                                console.log("Error counter is more than 3, reset and lets do new trade");
+                                LP.dataInvJup.errorCounter = 0;
+                                LP.dataInvJup.state = 0;
+                            }
                         }
                     }
                 }
@@ -404,17 +415,20 @@ async function main(LP, fromInvariant) {
                 }
 
                 if (LP.dataJupInv.state === 1) {
-                    const resultJupiterSwap = await swapJupiter(LP.dataJupInv.resultSimulateJupiter);
-                    if (resultJupiterSwap) {
-                        LP.dataJupInv.errorCounter = 0;
-                        LP.dataJupInv.state = 0;
-                    } else {
-                        LP.dataJupInv.errorCounter++;
-                        if (LP.dataJupInv.errorCounter >= 3) {
-                            console.log("Error counter is more than 3, reset and lets do new trade");
+                    while(LP.dataJupInv.state === 1) {
+                        const resultJupiterSwap = await swapJupiter(LP.dataJupInv.resultSimulateJupiter);
+                        if (resultJupiterSwap) {
                             LP.dataJupInv.errorCounter = 0;
                             LP.dataJupInv.state = 0;
-                        }
+                        } else {
+                            LP.dataJupInv.errorCounter++;
+                            console.log("Error counter is: " + LP.dataJupInv.errorCounter);
+                            if (LP.dataJupInv.errorCounter > 3) {
+                                console.log("Error counter is more than 3, reset and lets do new trade");
+                                LP.dataJupInv.errorCounter = 0;
+                                LP.dataJupInv.state = 0;
+                            }
+                        }                    
                     }
                 } else if (LP.dataJupInv.state === 2) {
                     const resultInvariantSwap = await swapInvariant(fromInvariant, LP.dataJupInv, LP.dataJupInv.yTokenBoughtAmount);
