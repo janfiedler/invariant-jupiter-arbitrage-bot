@@ -156,7 +156,7 @@ async function swapInvariant(fromInvariant, data, amount) {
 const getCoinQuote = (onlyDirectRoutes, inputMint, outputMint, amount) => {
     return got
         .get(
-            `https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=50&onlyDirectRoutes=${onlyDirectRoutes}`
+            `https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=100&onlyDirectRoutes=${onlyDirectRoutes}`
         )
         .json();
 };
@@ -241,6 +241,9 @@ async function swapJupiter(routes) {
                 console.error(`Jupiter swap failed: https://solscan.io/tx/${txid}`);
                 console.log(result.value.err);
                 if(result.value.err.InstructionError) {
+                    console.error("Slippage tolerance exceeded, retry!");
+                    return false;
+                } else if(result.value.err.InstructionError && jsonObject.InstructionError[1] && jsonObject.InstructionError[1].Custom === 6001) {
                     //this is fatal error, not worth to retry
                     console.error("this is fatal error, not worth to retry!");
                     return true;
