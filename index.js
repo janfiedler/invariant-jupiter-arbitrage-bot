@@ -263,7 +263,7 @@ async function swapJupiter(routes) {
         console.error(error);
         if (error.InstructionError) {
             //this is fatal error, not worth to retry
-            console.error("this is fatal error, not worth to retry!");
+            console.error("This catch error, not worth to retry!");
             return true;
         }
         return false;
