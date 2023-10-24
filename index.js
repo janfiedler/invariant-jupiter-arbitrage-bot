@@ -82,14 +82,14 @@ async function simulateInvariant(LP, fromInvariant, data, amountIn) {
         data.invariant.tokenYAddress = tokenY.address;
         data.invariant.market = data.invariant.market === null ? await Market.build(Network.MAIN, keypair, connection) : data.invariant.market;
         data.invariant.pair = data.invariant.pair === null ? new Pair(new PublicKey(data.invariant.tokenXAddress), new PublicKey(data.invariant.tokenYAddress), invariantFee) : data.invariant.pair;
-    
+
         data.invariant.ticks = new Map(
             (await data.invariant.market.getAllTicks(data.invariant.pair)).map(tick => {
                 return [tick.index, tick]
             })
         )
         data.invariant.poolData = await data.invariant.market.getPool(data.invariant.pair);
-    
+
         const result = await simulateSwap({
             xToY: fromInvariant,
             byAmountIn: true,
@@ -99,7 +99,7 @@ async function simulateInvariant(LP, fromInvariant, data, amountIn) {
             tickmap: await data.invariant.market.getTickmap(data.invariant.pair),
             pool: data.invariant.poolData
         });
-    
+
         return result;
     } catch (error) {
         console.log("Invariant simulate exception:");
@@ -183,7 +183,7 @@ const getTransaction = async (quoteResponse) => {
 };
 
 async function simulateJupiter(onlyDirectRoutes, data, from, to, amount) {
-    try{
+    try {
         const routes = await getCoinQuote(
             onlyDirectRoutes,
             new PublicKey(from.address),
@@ -211,11 +211,11 @@ async function simulateJupiter(onlyDirectRoutes, data, from, to, amount) {
 }
 
 async function swapJupiter(routes) {
-    try{
+    try {
         console.log("Processing jupiter swap");
         const response = await getTransaction(routes);
         let swapTransaction = response.swapTransaction;
-    
+
         if (typeof swapTransaction === 'undefined') {
             console.log('Undefined swapTransaction');
             process.exit(0);
@@ -225,31 +225,30 @@ async function swapJupiter(routes) {
             const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
             var transaction = VersionedTransaction.deserialize(swapTransactionBuf);
             //console.log(transaction);
-    
+
             // sign the transaction
             transaction.sign([wallet.payer]);
-    
+
             // Execute the transaction
             const rawTransaction = transaction.serialize()
             const txid = await connection.sendRawTransaction(rawTransaction, {
                 skipPreflight: true,
                 maxRetries: 2
             });
-    
+
             const result = await connection.confirmTransaction(txid);
             if (result.value.err != null) {
                 console.error(`Jupiter swap failed: https://solscan.io/tx/${txid}`);
                 console.log(result.value.err);
-                if(result.value.err.InstructionError) {
+                if (result.value.err.InstructionError && result.value.err.InstructionError[1] && result.value.err.InstructionError[1].Custom === 6001) {
                     console.error("Slippage tolerance exceeded, retry!");
                     return false;
-                } else if(result.value.err.InstructionError && jsonObject.InstructionError[1] && jsonObject.InstructionError[1].Custom === 6001) {
-                    //this is fatal error, not worth to retry
-                    console.error("this is fatal error, not worth to retry!");
+                } else if (result.value.err.InstructionError && result.value.err.InstructionError[1] && result.value.err.InstructionError[1].Custom === 6035) {
+                    console.error("Oracle confidence is too high, retry!");
+                    return false;
+                } else if (result.value.err.InstructionError) {
+                    console.error("This is fatal error, not worth to retry!");
                     return true;
-
-                   //console.error("Instruction error, retrying Jupiter swap");
-                   //await swapJupiter(routes);
                 }
             } else {
                 console.log("Jupiter swap done");
@@ -262,13 +261,13 @@ async function swapJupiter(routes) {
     } catch (error) {
         console.error("Jupiter swap exception:");
         console.error(error);
-        if(error.InstructionError) {
+        if (error.InstructionError) {
             //this is fatal error, not worth to retry
             console.error("this is fatal error, not worth to retry!");
             return true;
         }
         return false;
-    } 
+    }
 }
 
 async function verifyRequiredBalance(LP, data) {
@@ -325,7 +324,7 @@ async function main(LP, fromInvariant) {
 
                 LP.dataInvJup.resultSimulateJupiter = await simulateJupiter(LP.JUPITER.onlyDirectRoutes, LP.dataInvJup, LP.tokenY, LP.tokenX, new BN(LP.dataInvJup.yTokenBoughtAmount));
                 if (LP.dataInvJup.resultSimulateJupiter === null) {
-                    return ;
+                    return;
                 }
                 console.log(`Jupiter => ${transferAmountToUi(LP.dataInvJup.resultSimulateJupiter.inAmount, LP.tokenY.decimals)} ${LP.tokenY.symbol} => ${transferAmountToUi(LP.dataInvJup.resultSimulateJupiter.outAmount, LP.tokenX.decimals)} ${LP.tokenX.symbol}`);
             }
@@ -339,7 +338,7 @@ async function main(LP, fromInvariant) {
                 console.log("Swap out is bigger than swap in");
                 if (LP.dataInvJup.state === 0) {
                     const [resultInvariantSwap, resultJupiterSwap] = await Promise.all([swapInvariant(fromInvariant, LP.dataInvJup, LP.dataInvJup.xTokenInitialAmount),
-                                                                                        swapJupiter(LP.dataInvJup.resultSimulateJupiter)]);
+                    swapJupiter(LP.dataInvJup.resultSimulateJupiter)]);
                     if (resultInvariantSwap && resultJupiterSwap) {
                         LP.dataInvJup.state = 0;
                         LP.tempLoopTimeout = 0;
@@ -405,7 +404,7 @@ async function main(LP, fromInvariant) {
                 console.log("Swap out is bigger than swap in");
                 if (LP.dataJupInv.state === 0) {
                     const [resultJupiterSwap, resultInvariantSwap] = await Promise.all([swapJupiter(LP.dataJupInv.resultSimulateJupiter),
-                                                                                        swapInvariant(fromInvariant, LP.dataJupInv, LP.dataJupInv.yTokenBoughtAmount)]);
+                    swapInvariant(fromInvariant, LP.dataJupInv, LP.dataJupInv.yTokenBoughtAmount)]);
                     if (resultJupiterSwap && resultInvariantSwap) {
                         LP.dataJupInv.state = 0;
                         LP.tempLoopTimeout = 0;
@@ -418,7 +417,7 @@ async function main(LP, fromInvariant) {
                 }
 
                 if (LP.dataJupInv.state === 1) {
-                    while(LP.dataJupInv.state === 1) {
+                    while (LP.dataJupInv.state === 1) {
                         const resultJupiterSwap = await swapJupiter(LP.dataJupInv.resultSimulateJupiter);
                         if (resultJupiterSwap) {
                             LP.dataJupInv.errorCounter = 0;
@@ -431,7 +430,7 @@ async function main(LP, fromInvariant) {
                                 LP.dataJupInv.errorCounter = 0;
                                 LP.dataJupInv.state = 0;
                             }
-                        }                    
+                        }
                     }
                 } else if (LP.dataJupInv.state === 2) {
                     const resultInvariantSwap = await swapInvariant(fromInvariant, LP.dataJupInv, LP.dataJupInv.yTokenBoughtAmount);
