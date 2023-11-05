@@ -28,6 +28,7 @@ let connection = new Connection(RPC_ENDPOINT, { confirmTransactionInitialTimeout
 // Catch request to exit process, wait until round is finished
 let running = true;
 let countSigint = 0;
+
 process.on('SIGINT', () => {
     console.log("Caught request to exit process, waiting until round is finished");
     if (countSigint > 0) {
@@ -109,7 +110,7 @@ async function simulateInvariant(LP, fromInvariant, data, amountIn) {
 }
 
 async function swapInvariant(fromInvariant, data, amount) {
-    console.log("Processing Invariant swap");
+    var logMessage = "\x1b[90mProcessing Invariant swap \x1b[0m \n";
     // Get the associated account for the token in wallet if not already found
     if (data.invariant.accountX === null || data.invariant.accountY === null) {
         const [accountX, accountY] = await Promise.all([
@@ -148,18 +149,27 @@ async function swapInvariant(fromInvariant, data, amount) {
 
     //Perform the swap
     let resultInvariantSwap = await data.invariant.market.swap(swapVars, keypair);
-    console.log("Invariant swap done");
-    console.log(`https://solscan.io/tx/${resultInvariantSwap}`);
-    return resultInvariantSwap;
+    logMessage += "\x1b[34mInvariant\x1b[0m \x1b[32mswap done \x1b[0m \n";
+    logMessage += `https://solscan.io/tx/${resultInvariantSwap}\n`;
+    return [resultInvariantSwap, logMessage];
 }
 
-const getCoinQuote = (onlyDirectRoutes, inputMint, outputMint, amount) => {
-    return got
-        .get(
-            `https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=100&onlyDirectRoutes=${onlyDirectRoutes}`
-        )
-        .json();
+const getCoinQuote = async (onlyDirectRoutes, inputMint, outputMint, amount) => {
+    try {
+        const result = await got
+            .get(
+                `https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=100&onlyDirectRoutes=${onlyDirectRoutes}`
+            )
+            .json();
+        return [result, "\x1b[90mCoin quote fetched \x1b[0m \n"];
+    } catch (error) {
+        return [null, "\x1b[31mAn error occurred while fetching the coin quote: \x1b[0m" + error  + "\n"];
+    }
 };
+
+
+
+
 
 const getTransaction = async (quoteResponse) => {
     try {
@@ -175,10 +185,10 @@ const getTransaction = async (quoteResponse) => {
             responseType: 'json'
         });
 
-        return response.body;
+        return [response.body, "\x1b[90mTransaction fetched \x1b[0m \n"];
 
     } catch (error) {
-        throw new Error(`Got error: ${error.response.body}`);
+        return [null, "\x1b[31mAn error occurred while fetching the transaction: \x1b[0m" + error];
     }
 };
 
@@ -192,9 +202,7 @@ async function simulateJupiter(onlyDirectRoutes, data, from, to, amount) {
         );
         return routes;
     } catch (error) {
-        console.log("Jupiter simulate exception:");
-        console.log(error);
-        return null;
+        return [null, "\x1b[31mupiter simulate exception: \x1b[0m" + error + "\n"]
     }
     /*
     const routes = await jupiter.computeRoutes({
@@ -211,10 +219,12 @@ async function simulateJupiter(onlyDirectRoutes, data, from, to, amount) {
 }
 
 async function swapJupiter(routes) {
+    let customMessage = "\x1b[90mProcessing jupiter swap \x1b[0m \n";
     try {
-        console.log("Processing jupiter swap");
         const response = await getTransaction(routes);
-        let swapTransaction = response.swapTransaction;
+        customMessage += response[1];
+        if (response[0] === null) { return [null, response[1]]; }
+        let swapTransaction = response[0].swapTransaction;
 
         if (typeof swapTransaction === 'undefined') {
             console.log('Undefined swapTransaction');
@@ -238,35 +248,32 @@ async function swapJupiter(routes) {
 
             const result = await connection.confirmTransaction(txid);
             if (result.value.err != null) {
-                console.error(`Jupiter swap failed: https://solscan.io/tx/${txid}`);
-                console.log(result.value.err);
+                customMessage += `\x1b[31mJupiter swap failed: \x1b[0m https://solscan.io/tx/${txid}\n`;
+                customMessage += result.value.err + "\n";
                 if (result.value.err.InstructionError && result.value.err.InstructionError[1] && result.value.err.InstructionError[1].Custom === 6001) {
-                    console.error("Slippage tolerance exceeded, retry!");
-                    return false;
+                    customMessage += "\x1b[31mSlippage tolerance exceeded, retry! \x1b[0m \n";
+                    return [false, customMessage];
                 } else if (result.value.err.InstructionError && result.value.err.InstructionError[1] && result.value.err.InstructionError[1].Custom === 6035) {
-                    console.error("Oracle confidence is too high, retry!");
-                    return false;
+                    customMessage += "\x1b[31mOracle confidence is too high, retry! \x1b[0m \n";
+                    return [false, customMessage];
                 } else if (result.value.err.InstructionError) {
-                    console.error("This is fatal error, not worth to retry!");
-                    return true;
+                    customMessage += "\x1b[31mThis is fatal error, not worth to retry! \x1b[0m\n";
+                    return [true, customMessage];
                 }
             } else {
-                console.log("Jupiter swap done");
-                console.log(`https://solscan.io/tx/${txid}`);
+                customMessage += "\x1b[34mJupiter\x1b[0m \x1b[32mswap done \x1b[0m \n";
+                customMessage += `https://solscan.io/tx/${txid}\n`;
             }
-            //console.log(result);
-            //console.log(result.value.err == null);
-            return result.value.err == null;
+            return [result.value.err == null, customMessage];
         }
     } catch (error) {
-        console.error("Jupiter swap exception:");
-        console.error(error);
+        customMessage += "\x1b[31mJupiter swap exception: \x1b[0m \n";
+        customMessage += error + "\n";
         if (error.InstructionError) {
-            //this is fatal error, not worth to retry
-            console.error("This catch error, not worth to retry!");
-            return true;
+            customMessage += "\x1b[31mThis is fatal error, not worth to retry! \x1b[0m \n";
+            return [true, customMessage];
         }
-        return false;
+        return [false, customMessage];
     }
 }
 
@@ -298,11 +305,9 @@ async function verifyRequiredBalance(LP, data) {
 
 // create and call async main function
 async function main(LP, fromInvariant) {
-
-    //Create console log with divider
-    console.log('-----------------------------------------------------------------------------------------------------------------');
-    console.log("[" + new Date().toISOString() + "]");
-    console.log(`Processing ${LP.tokenX.symbol} / ${LP.tokenY.symbol} with amount ${LP.tokenAmount} and fromInvariant ${fromInvariant}`);
+    LP.logMessage = '-----------------------------------------------------------------------------------------------------------------\n';
+    LP.logMessage += "\x1b[97m[" + new Date().toISOString() + "] \x1b[0m \n";
+    LP.logMessage += `\x1b[90mProcessing ${LP.tokenX.symbol} / ${LP.tokenY.symbol} with amount ${LP.tokenAmount} and fromInvariant ${fromInvariant} \x1b[0m \n`;
 
     try {
         if (fromInvariant) {
@@ -313,38 +318,48 @@ async function main(LP, fromInvariant) {
                 );
                 LP.dataInvJup.resultSimulateInvariant = await simulateInvariant(LP, fromInvariant, LP.dataInvJup, LP.dataInvJup.xTokenInitialAmount);
                 if (LP.dataInvJup.resultSimulateInvariant === null) {
+                    console.log(LP.logMessage);    
                     return;
                 }
                 if (LP.dataInvJup.resultSimulateInvariant.accumulatedAmountIn == 0 || LP.dataInvJup.resultSimulateInvariant.accumulatedAmountOut == 0) {
-                    console.log(LP.dataInvJup.resultSimulateInvariant.status);
+                    LP.logMessage += LP.dataInvJup.resultSimulateInvariant.status + "\n";
+                    console.log(LP.logMessage);    
                     return;
                 }
-                console.log(`Invarinat => ${transferAmountToUi(LP.dataInvJup.resultSimulateInvariant.accumulatedAmountIn.add(LP.dataInvJup.resultSimulateInvariant.accumulatedFee), LP.tokenX.decimals)} ${LP.tokenX.symbol} => ${transferAmountToUi(LP.dataInvJup.resultSimulateInvariant.accumulatedAmountOut, LP.tokenY.decimals)} ${LP.tokenY.symbol}`)
+               LP.logMessage += `\x1b[34mInvarinat \x1b[0m => \x1b[33m ${transferAmountToUi(LP.dataInvJup.resultSimulateInvariant.accumulatedAmountIn.add(LP.dataInvJup.resultSimulateInvariant.accumulatedFee), LP.tokenX.decimals)} \x1b[0m \x1b[34m ${LP.tokenX.symbol} \x1b[0m => \x1b[33m ${transferAmountToUi(LP.dataInvJup.resultSimulateInvariant.accumulatedAmountOut, LP.tokenY.decimals)} \x1b[0m \x1b[34m${LP.tokenY.symbol}  \x1b[0m \n`;
                 LP.dataInvJup.yTokenBoughtAmount = LP.dataInvJup.resultSimulateInvariant.accumulatedAmountOut;
 
-                LP.dataInvJup.resultSimulateJupiter = await simulateJupiter(LP.JUPITER.onlyDirectRoutes, LP.dataInvJup, LP.tokenY, LP.tokenX, new BN(LP.dataInvJup.yTokenBoughtAmount));
-                if (LP.dataInvJup.resultSimulateJupiter === null) {
+                const resultSimulateJupiter = await simulateJupiter(LP.JUPITER.onlyDirectRoutes, LP.dataInvJup, LP.tokenY, LP.tokenX, new BN(LP.dataInvJup.yTokenBoughtAmount));
+                LP.logMessage += resultSimulateJupiter[1];
+                if (resultSimulateJupiter[0] === null) {
+                    console.log(LP.logMessage);
                     return;
+                } else {
+                    LP.dataInvJup.resultSimulateJupiter = resultSimulateJupiter[0];
                 }
-                console.log(`Jupiter => ${transferAmountToUi(LP.dataInvJup.resultSimulateJupiter.inAmount, LP.tokenY.decimals)} ${LP.tokenY.symbol} => ${transferAmountToUi(LP.dataInvJup.resultSimulateJupiter.outAmount, LP.tokenX.decimals)} ${LP.tokenX.symbol}`);
+                LP.logMessage += `\x1b[34mJupiter \x1b[0m => \x1b[33m ${transferAmountToUi(LP.dataInvJup.resultSimulateJupiter.inAmount, LP.tokenY.decimals)} \x1b[0m \x1b[34m ${LP.tokenY.symbol}  \x1b[0m => \x1b[33m ${transferAmountToUi(LP.dataInvJup.resultSimulateJupiter.outAmount, LP.tokenX.decimals)} \x1b[0m \x1b[34m ${LP.tokenX.symbol}  \x1b[0m \n`;
             }
 
             const toOutAmount = new BN(LP.dataInvJup.resultSimulateJupiter.outAmount);
-            console.log("fromInAmount", transferAmountToUi(LP.dataInvJup.xTokenInitialAmount, LP.tokenX.decimals));
-            console.log("toOutAmount", transferAmountToUi(toOutAmount, LP.tokenX.decimals));
-            console.log("diff", transferAmountToUi((toOutAmount - LP.dataInvJup.xTokenInitialAmount), LP.tokenX.decimals));
+            LP.logMessage += `\x1b[90mfromInAmount:\x1b[0m \x1b[33m ${transferAmountToUi(LP.dataInvJup.xTokenInitialAmount, LP.tokenX.decimals)} \x1b[0m \n`;
+            LP.logMessage += `\x1b[90mtoOutAmount:\x1b[0m \x1b[33m ${transferAmountToUi(toOutAmount, LP.tokenX.decimals)} \x1b[0m \n`;
+            LP.logMessage += `\x1b[90mdiff:\x1b[0m \x1b[33m ${transferAmountToUi((toOutAmount - LP.dataInvJup.xTokenInitialAmount), LP.tokenX.decimals)} \x1b[0m \n`;
+
             if ((toOutAmount > LP.dataInvJup.xTokenInitialAmount) && ((toOutAmount - LP.dataInvJup.xTokenInitialAmount) > LP.minUnitProfit)) {
 
-                console.log("Swap out is bigger than swap in");
+                 LP.logMessage += "\x1b[32mSwap out is bigger than swap in \x1b[0m \n";
+
                 if (LP.dataInvJup.state === 0) {
                     const [resultInvariantSwap, resultJupiterSwap] = await Promise.all([swapInvariant(fromInvariant, LP.dataInvJup, LP.dataInvJup.xTokenInitialAmount),
                     swapJupiter(LP.dataInvJup.resultSimulateJupiter)]);
-                    if (resultInvariantSwap && resultJupiterSwap) {
+                    LP.logMessage += resultJupiterSwap[1];
+                    LP.logMessage += resultInvariantSwap[1];
+                    if (resultInvariantSwap[0] && resultJupiterSwap[0]) {
                         LP.dataInvJup.state = 0;
                         LP.tempLoopTimeout = 0;
-                    } else if (!resultInvariantSwap && resultJupiterSwap) {
+                    } else if (!resultInvariantSwap[0] && resultJupiterSwap[0]) {
                         LP.dataInvJup.state = 1;
-                    } else if (resultInvariantSwap && !resultJupiterSwap) {
+                    } else if (resultInvariantSwap[0] && !resultJupiterSwap[0]) {
                         LP.dataInvJup.state = 2;
                         LP.dataInvJup.errorCounter++;
                     }
@@ -352,20 +367,25 @@ async function main(LP, fromInvariant) {
 
                 if (LP.dataInvJup.state === 1) {
                     const resultInvariantSwap = await swapInvariant(fromInvariant, LP.dataInvJup, LP.dataInvJup.xTokenInitialAmount);
-                    if (resultInvariantSwap) {
+                    LP.logMessage += resultInvariantSwap[1];
+                    if (resultInvariantSwap[0]) {
                         LP.dataInvJup.state = 0;
                     }
                 } else if (LP.dataInvJup.state === 2) {
                     while (LP.dataInvJup.state === 2) {
                         const resultJupiterSwap = await swapJupiter(LP.dataInvJup.resultSimulateJupiter);
-                        if (resultJupiterSwap) {
+                        LP.logMessage += resultJupiterSwap[1];
+                        if(resultJupiterSwap[0] === null) {
+                            console.log(LP.logMessage);
+                            return;
+                        } else if (resultJupiterSwap[0]) {
                             LP.dataInvJup.errorCounter = 0;
                             LP.dataInvJup.state = 0;
                         } else {
-                            console.log("Error counter is: " + LP.dataInvJup.errorCounter);
+                            LP.logMessage += "\x1b[31mError\x1b[0m counter is: " + LP.dataInvJup.errorCounter + "\n";
                             LP.dataInvJup.errorCounter++;
                             if (LP.dataInvJup.errorCounter > 3) {
-                                console.log("Error counter is more than 3, reset and lets do new trade");
+                                LP.logMessage += "\x1b[31mError\x1b[0m counter is more than 3, reset and lets do new trade\n";
                                 LP.dataInvJup.errorCounter = 0;
                                 LP.dataInvJup.state = 0;
                             }
@@ -373,7 +393,7 @@ async function main(LP, fromInvariant) {
                     }
                 }
             } else {
-                console.log("Swap in is bigger than swap out");
+                LP.logMessage += "\x1b[31mSwap in is bigger than swap out \x1b[0m \n";
             }
         } else {
             if (LP.dataJupInv.state === 0) {
@@ -381,37 +401,46 @@ async function main(LP, fromInvariant) {
                     LP.tokenAmount,
                     LP.tokenX.decimals
                 );
-                LP.dataJupInv.resultSimulateJupiter = await simulateJupiter(LP.JUPITER.onlyDirectRoutes, LP.dataJupInv, LP.tokenX, LP.tokenY, new BN(LP.dataJupInv.xTokenInitialAmount));
-                if (LP.dataJupInv.resultSimulateJupiter === null) {
+                const resultSimulateJupiter = await simulateJupiter(LP.JUPITER.onlyDirectRoutes, LP.dataJupInv, LP.tokenX, LP.tokenY, new BN(LP.dataJupInv.xTokenInitialAmount));
+                LP.logMessage += resultSimulateJupiter[1];
+                if (resultSimulateJupiter[0] === null) {
+                    console.log(LP.logMessage);
                     return;
+                } else {
+                    LP.dataJupInv.resultSimulateJupiter = resultSimulateJupiter[0];
                 }
-                console.log(`Jupiter => ${transferAmountToUi(LP.dataJupInv.resultSimulateJupiter.inAmount, LP.tokenX.decimals)} ${LP.tokenX.symbol} => ${transferAmountToUi(LP.dataJupInv.resultSimulateJupiter.outAmount, LP.tokenY.decimals)} ${LP.tokenY.symbol}`);
+                LP.logMessage += `\x1b[34mJupiter \x1b[0m => \x1b[33m ${transferAmountToUi(LP.dataJupInv.resultSimulateJupiter.inAmount, LP.tokenX.decimals)}  \x1b[0m \x1b[34m ${LP.tokenX.symbol} \x1b[0m => \x1b[33m ${transferAmountToUi(LP.dataJupInv.resultSimulateJupiter.outAmount, LP.tokenY.decimals)}  \x1b[0m \x1b[34m ${LP.tokenY.symbol} \x1b[0m \n`;
+
                 LP.dataJupInv.yTokenBoughtAmount = new BN(LP.dataJupInv.resultSimulateJupiter.outAmount);
 
                 LP.dataJupInv.resultSimulateInvariant = await simulateInvariant(LP, fromInvariant, LP.dataJupInv, LP.dataJupInv.yTokenBoughtAmount);
                 if (LP.dataJupInv.resultSimulateInvariant === null) {
                     return;
                 }
-                console.log(`Invariant => ${transferAmountToUi(LP.dataJupInv.resultSimulateInvariant.accumulatedAmountIn, LP.tokenY.decimals)} (fee:${transferAmountToUi(LP.dataJupInv.resultSimulateInvariant.accumulatedFee, LP.tokenY.decimals)}) ${LP.tokenY.symbol} => ${transferAmountToUi(LP.dataJupInv.resultSimulateInvariant.accumulatedAmountOut, LP.tokenX.decimals)} ${LP.tokenX.symbol}`);
+                LP.logMessage += `\x1b[34mInvariant \x1b[0m => \x1b[33m ${transferAmountToUi(LP.dataJupInv.resultSimulateInvariant.accumulatedAmountIn, LP.tokenY.decimals)} \x1b[0m (fee:${transferAmountToUi(LP.dataJupInv.resultSimulateInvariant.accumulatedFee, LP.tokenY.decimals)}) \x1b[34m ${LP.tokenY.symbol}  \x1b[0m => \x1b[33m ${transferAmountToUi(LP.dataJupInv.resultSimulateInvariant.accumulatedAmountOut, LP.tokenX.decimals)}  \x1b[0m \x1b[34m ${LP.tokenX.symbol} \x1b[0m \n`;
             }
 
             const toOutAmount = Number(LP.dataJupInv.resultSimulateInvariant.accumulatedAmountOut);
-            console.log("fromInAmount", transferAmountToUi(LP.dataJupInv.xTokenInitialAmount, LP.tokenX.decimals));
-            console.log("toOutAmount", transferAmountToUi(toOutAmount, LP.tokenX.decimals));
-            console.log("diff", transferAmountToUi((toOutAmount - LP.dataJupInv.xTokenInitialAmount), LP.tokenY.decimals));
+
+            LP.logMessage += `\x1b[90mfromInAmount:\x1b[0m \x1b[33m ${transferAmountToUi(LP.dataJupInv.xTokenInitialAmount, LP.tokenX.decimals)} \x1b[0m \n`;
+            LP.logMessage += `\x1b[90mtoOutAmount:\x1b[0m \x1b[33m ${transferAmountToUi(toOutAmount, LP.tokenX.decimals)} \x1b[0m \n`;
+            LP.logMessage += `\x1b[90mdiff:\x1b[0m \x1b[33m ${transferAmountToUi((toOutAmount - LP.dataJupInv.xTokenInitialAmount), LP.tokenY.decimals)} \x1b[0m \n`;
+
             if ((toOutAmount > LP.dataJupInv.xTokenInitialAmount) && ((toOutAmount - LP.dataJupInv.xTokenInitialAmount) > LP.minUnitProfit)) {
 
-                console.log("Swap out is bigger than swap in");
+                 LP.logMessage += "\x1b[32mSwap out is bigger than swap in \x1b[0m \n";
                 if (LP.dataJupInv.state === 0) {
                     const [resultJupiterSwap, resultInvariantSwap] = await Promise.all([swapJupiter(LP.dataJupInv.resultSimulateJupiter),
                     swapInvariant(fromInvariant, LP.dataJupInv, LP.dataJupInv.yTokenBoughtAmount)]);
-                    if (resultJupiterSwap && resultInvariantSwap) {
+                    LP.logMessage += resultJupiterSwap[1];
+                    LP.logMessage += resultInvariantSwap[1];
+                    if (resultJupiterSwap[0] && resultInvariantSwap[0]) {
                         LP.dataJupInv.state = 0;
                         LP.tempLoopTimeout = 0;
-                    } else if (!resultJupiterSwap && resultInvariantSwap) {
+                    } else if (!resultJupiterSwap[0] && resultInvariantSwap[0]) {
                         LP.dataJupInv.state = 1;
                         LP.dataJupInv.errorCounter++;
-                    } else if (resultJupiterSwap && !resultInvariantSwap) {
+                    } else if (resultJupiterSwap[0] && !resultInvariantSwap[0]) {
                         LP.dataJupInv.state = 2
                     }
                 }
@@ -419,14 +448,15 @@ async function main(LP, fromInvariant) {
                 if (LP.dataJupInv.state === 1) {
                     while (LP.dataJupInv.state === 1) {
                         const resultJupiterSwap = await swapJupiter(LP.dataJupInv.resultSimulateJupiter);
-                        if (resultJupiterSwap) {
+                        LP.logMessage += resultJupiterSwap[1];
+                        if (resultJupiterSwap[0]) {
                             LP.dataJupInv.errorCounter = 0;
                             LP.dataJupInv.state = 0;
                         } else {
                             LP.dataJupInv.errorCounter++;
-                            console.log("Error counter is: " + LP.dataJupInv.errorCounter);
+                            LP.logMessage += "\x1b[31mError\x1b[0m counter is: " + LP.dataJupInv.errorCounter + "\n";
                             if (LP.dataJupInv.errorCounter > 3) {
-                                console.log("Error counter is more than 3, reset and lets do new trade");
+                                LP.logMessage += "Error counter is more than 3, reset and lets do new trade\n";
                                 LP.dataJupInv.errorCounter = 0;
                                 LP.dataJupInv.state = 0;
                             }
@@ -434,17 +464,19 @@ async function main(LP, fromInvariant) {
                     }
                 } else if (LP.dataJupInv.state === 2) {
                     const resultInvariantSwap = await swapInvariant(fromInvariant, LP.dataJupInv, LP.dataJupInv.yTokenBoughtAmount);
-                    if (resultInvariantSwap) {
+                    LP.logMessage += resultInvariantSwap[1];
+                    if (resultInvariantSwap[0]) {
                         LP.dataJupInv.state = 0;
                     }
                 }
             } else {
-                console.log("Swap in is bigger than swap out");
+                LP.logMessage += "\x1b[31mSwap in is bigger than swap out \x1b[0m \n";
             }
         }
     } catch (error) {
-        console.log(error);
+        LP.logMessage += error + "\n";
     }
+    console.log(LP.logMessage);
 }
 
 // if LP.bothAssets is true skip sleep function, we don't need to wait on sync node
@@ -456,7 +488,7 @@ async function shouldWait(LP) {
 
 async function begin() {
     // If running true, do job else return and finish
-    if (running) {
+    while (running) {
         let skipLoopTimeout = false;
         // Loop through all settings
         for (const LP of LPs) {
@@ -485,12 +517,7 @@ async function begin() {
         if (!skipLoopTimeout) {
             await sleep(SETTINGS.LOOP_TIMEOUT * 1000);
         }
-        begin();
     }
 }
-
-// Create empty async function that start immediately
-(async () => {
-    //Init jupiter
-    begin();
-})();
+  
+begin();
