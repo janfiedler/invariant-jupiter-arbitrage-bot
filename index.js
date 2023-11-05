@@ -476,7 +476,6 @@ async function main(LP, fromInvariant) {
     } catch (error) {
         LP.logMessage += error + "\n";
     }
-    console.log(LP.logMessage);
 }
 
 // if LP.bothAssets is true skip sleep function, we don't need to wait on sync node
