@@ -319,12 +319,12 @@ async function main(LP, fromInvariant) {
                 LP.dataInvJup.resultSimulateInvariant = await simulateInvariant(LP, fromInvariant, LP.dataInvJup, LP.dataInvJup.xTokenInitialAmount);
                 if (LP.dataInvJup.resultSimulateInvariant === null) {
                     console.log(LP.logMessage);    
-                    return;
+                    return false;
                 }
                 if (LP.dataInvJup.resultSimulateInvariant.accumulatedAmountIn == 0 || LP.dataInvJup.resultSimulateInvariant.accumulatedAmountOut == 0) {
                     LP.logMessage += LP.dataInvJup.resultSimulateInvariant.status + "\n";
                     console.log(LP.logMessage);    
-                    return;
+                    return false;
                 }
                LP.logMessage += `\x1b[34mInvarinat \x1b[0m => \x1b[33m ${transferAmountToUi(LP.dataInvJup.resultSimulateInvariant.accumulatedAmountIn.add(LP.dataInvJup.resultSimulateInvariant.accumulatedFee), LP.tokenX.decimals)} \x1b[0m \x1b[34m ${LP.tokenX.symbol} \x1b[0m => \x1b[33m ${transferAmountToUi(LP.dataInvJup.resultSimulateInvariant.accumulatedAmountOut, LP.tokenY.decimals)} \x1b[0m \x1b[34m${LP.tokenY.symbol}  \x1b[0m \n`;
                 LP.dataInvJup.yTokenBoughtAmount = LP.dataInvJup.resultSimulateInvariant.accumulatedAmountOut;
@@ -333,7 +333,7 @@ async function main(LP, fromInvariant) {
                 LP.logMessage += resultSimulateJupiter[1];
                 if (resultSimulateJupiter[0] === null) {
                     console.log(LP.logMessage);
-                    return;
+                    return false;
                 } else {
                     LP.dataInvJup.resultSimulateJupiter = resultSimulateJupiter[0];
                 }
@@ -392,8 +392,10 @@ async function main(LP, fromInvariant) {
                         }
                     }
                 }
+                return true;
             } else {
                 LP.logMessage += "\x1b[31mSwap in is bigger than swap out \x1b[0m \n";
+                return false;
             }
         } else {
             if (LP.dataJupInv.state === 0) {
@@ -405,7 +407,7 @@ async function main(LP, fromInvariant) {
                 LP.logMessage += resultSimulateJupiter[1];
                 if (resultSimulateJupiter[0] === null) {
                     console.log(LP.logMessage);
-                    return;
+                    return false;
                 } else {
                     LP.dataJupInv.resultSimulateJupiter = resultSimulateJupiter[0];
                 }
@@ -415,7 +417,7 @@ async function main(LP, fromInvariant) {
 
                 LP.dataJupInv.resultSimulateInvariant = await simulateInvariant(LP, fromInvariant, LP.dataJupInv, LP.dataJupInv.yTokenBoughtAmount);
                 if (LP.dataJupInv.resultSimulateInvariant === null) {
-                    return;
+                    return false;
                 }
                 LP.logMessage += `\x1b[34mInvariant \x1b[0m => \x1b[33m ${transferAmountToUi(LP.dataJupInv.resultSimulateInvariant.accumulatedAmountIn, LP.tokenY.decimals)} \x1b[0m (fee:${transferAmountToUi(LP.dataJupInv.resultSimulateInvariant.accumulatedFee, LP.tokenY.decimals)}) \x1b[34m ${LP.tokenY.symbol}  \x1b[0m => \x1b[33m ${transferAmountToUi(LP.dataJupInv.resultSimulateInvariant.accumulatedAmountOut, LP.tokenX.decimals)}  \x1b[0m \x1b[34m ${LP.tokenX.symbol} \x1b[0m \n`;
             }
@@ -469,8 +471,10 @@ async function main(LP, fromInvariant) {
                         LP.dataJupInv.state = 0;
                     }
                 }
+                return true;
             } else {
                 LP.logMessage += "\x1b[31mSwap in is bigger than swap out \x1b[0m \n";
+                return false;
             }
         }
     } catch (error) {
