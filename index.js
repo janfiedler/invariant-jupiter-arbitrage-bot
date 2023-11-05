@@ -307,7 +307,7 @@ async function verifyRequiredBalance(LP, data) {
 async function main(LP, fromInvariant) {
     LP.logMessage = '-----------------------------------------------------------------------------------------------------------------\n';
     LP.logMessage += "\x1b[97m[" + new Date().toISOString() + "] \x1b[0m \n";
-    LP.logMessage += `\x1b[90mProcessing ${LP.tokenX.symbol} / ${LP.tokenY.symbol} with amount ${LP.tokenAmount} and fromInvariant ${fromInvariant} \x1b[0m \n`;
+    LP.logMessage += `\x1b[90mProcessing ${LP.JUPITER.onlyDirectRoutes ? 'onlyDirectRoutes' : ''} ${LP.tokenX.symbol} / ${LP.tokenY.symbol} with amount ${LP.tokenAmount} and fromInvariant ${fromInvariant} \x1b[0m \n`;
 
     try {
         if (fromInvariant) {
@@ -489,33 +489,27 @@ async function shouldWait(LP) {
 async function begin() {
     // If running true, do job else return and finish
     while (running) {
-        let skipLoopTimeout = false;
         // Loop through all settings
         for (const LP of LPs) {
-            // Set default loop timeout for current LP
-            LP.tempLoopTimeout = SETTINGS.LOOP_TIMEOUT;
             // Call main function.
             // fromInvariant:
             // TRUE = buy on invariant and sell on jupiter
             // FALSE = buy on jupiter and sell on invariant
 
-            //First try trade same way as last cycle (don't waste time with opposite trade)
             if (LP.fromInvariant) {
-                await main(LP, true);
-                LP.fromInvariant = LP.tempLoopTimeout === 0;
+                const swapped = await main(LP, true);
+                //If no swap executed fromInvariant toJupiter, try swap fromJupiter toInvariant
+                if (!swapped) {
+                    LP.fromInvariant = false;
+                }
+            } else {
+                const swapped = await main(LP, false);
+                //If no swapp executed fromJupiter to Invariant, try swap fromInvariant toJupiter
+                if (!swapped) {
+                    LP.fromInvariant = true;
+                }
             }
-            //If swap fromInvariant toJupiter not executed, try fromJupiter toInvariant
-            if (!LP.fromInvariant) {
-                await main(LP, false);
-                LP.fromInvariant = LP.tempLoopTimeout !== 0;
-            }
-            // If skipLoopTimeout is false, check if LP swap completed. Then do not sleep and do new loop timidity
-            if (!skipLoopTimeout) {
-                skipLoopTimeout = LP.tempLoopTimeout === 0;
-            }
-        }
-        if (!skipLoopTimeout) {
-            await sleep(SETTINGS.LOOP_TIMEOUT * 1000);
+            console.log(LP.logMessage);
         }
     }
 }
