@@ -312,7 +312,7 @@ async function verifyRequiredBalance(LP, data) {
 async function main(LP, fromInvariant) {
     LP.logMessage = '-----------------------------------------------------------------------------------------------------------------\n';
     LP.logMessage += "\x1b[97m[" + new Date().toISOString() + "] \x1b[0m \n";
-    LP.logMessage += `\x1b[90mProcessing ${LP.JUPITER.onlyDirectRoutes === true ? 'onlyDirectRoutes' : ''} ${LP.tokenX.symbol} / ${LP.tokenY.symbol} with amount ${LP.tokenAmount} and fromInvariant ${fromInvariant} \x1b[0m \n`;
+    LP.logMessage += `\x1b[90mProcessing ${(LP.JUPITER.onlyDirectRoutes === 'true' ? 'onlyDirectRoutes' : '')} ${LP.tokenX.symbol} / ${LP.tokenY.symbol} with amount ${LP.tokenAmount} and fromInvariant ${fromInvariant} \x1b[0m \n`;
 
     try {
         if (fromInvariant) {
