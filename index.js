@@ -14,7 +14,7 @@ import JSBI from 'jsbi';
 dotenv.config();
 const { KEYPAIR, RPC_ENDPOINT } = process.env;
 
-import { LPs, SETTINGS } from './config.js';
+import { LPs } from './config.js';
 
 // Try parse index of config from agruments
 let indexOfLP = parseInt(process.argv[2], 10);
@@ -484,13 +484,6 @@ async function main(LP, fromInvariant) {
         }
     } catch (error) {
         LP.logMessage += error + "\n";
-    }
-}
-
-// if LP.bothAssets is true skip sleep function, we don't need to wait on sync node
-async function shouldWait(LP) {
-    if (!LP.bothAssets) {
-        await sleep(SETTINGS.pauseAfterTransaction * 1000);
     }
 }
 
