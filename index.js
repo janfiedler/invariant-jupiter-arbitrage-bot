@@ -16,6 +16,11 @@ const { KEYPAIR, RPC_ENDPOINT } = process.env;
 
 import { LPs, SETTINGS } from './config.js';
 
+// Try parse index of config from agruments
+let indexOfLP = parseInt(process.argv[2], 10);
+// Verify if parses index is number
+indexOfLP = isNaN(indexOfLP) ? -1 : indexOfLP;
+
 let secretKey = Uint8Array.from(JSON.parse(KEYPAIR));
 const wallet = new Wallet(
     Keypair.fromSecretKey(secretKey)
@@ -490,10 +495,20 @@ async function shouldWait(LP) {
 }
 
 async function begin() {
+    let finalLPs = [];
+    // If index of config is set, run only that config. Else run all configs
+    if (indexOfLP >= 0 && indexOfLP < LPs.length) {
+        finalLPs = LPs.slice(indexOfLP, indexOfLP + 1);
+        console.log(`Running configuration for LP at index ${indexOfLP} only.`);
+    } else {
+        finalLPs = LPs;
+        console.log("LPs in config:", finalLPs.length);
+    }
+    
     // If running true, do job else return and finish
     while (running) {
         // Loop through all settings
-        for (const LP of LPs) {
+        for (const LP of finalLPs) {
             // Call main function.
             // fromInvariant:
             // TRUE = buy on invariant and sell on jupiter
