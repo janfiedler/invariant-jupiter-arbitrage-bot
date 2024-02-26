@@ -185,7 +185,8 @@ const getTransaction = async (quoteResponse) => {
             json: {
                 quoteResponse,
                 userPublicKey: wallet.publicKey.toString(),
-                wrapAndUnwrapSol: false
+                wrapAndUnwrapSol: false,
+                prioritizationFeeLamports: 1000
             },
             responseType: 'json'
         });
